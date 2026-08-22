@@ -1,0 +1,19 @@
+# Personal vault data used as local-mode test content — not for version control.
+vault/
+
+# Kubeconfigs contain live cluster credentials.
+*.kubeconfig
+
+# Personal deploy-time values (real cluster hostnames/domains) — use
+# values-example.yaml as the public template instead.
+charts/vaultviewer/values-cluster-mesh1.yaml
+
+# Node
+web/node_modules/
+web/dist/
+
+# Go
+*.test
+
+# OS
+.DS_Store

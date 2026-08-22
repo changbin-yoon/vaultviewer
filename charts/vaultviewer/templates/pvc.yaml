@@ -1,0 +1,17 @@
+{{- if and (eq .Values.mode "local") .Values.local.persistence.enabled (not .Values.local.persistence.existingClaim) -}}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "vaultviewer.fullname" . }}-data
+  labels:
+    {{- include "vaultviewer.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - {{ .Values.local.persistence.accessMode }}
+  {{- with .Values.local.persistence.storageClass }}
+  storageClassName: {{ . }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.local.persistence.size }}
+{{- end -}}

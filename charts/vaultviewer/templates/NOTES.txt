@@ -1,0 +1,29 @@
+VaultViewer가 {{ .Values.mode }} 모드로 배포되었습니다.
+
+{{- if eq .Values.mode "local" }}
+로컬 모드: {{ .Values.local.persistence.mountPath }}에 마운트된 볼륨의 내용을 서빙합니다.
+{{- if not .Values.local.persistence.existingClaim }}
+  PVC: {{ include "vaultviewer.fullname" . }}-data ({{ .Values.local.persistence.size }})
+{{- end }}
+{{- else }}
+클러스터 모드: {{ include "vaultviewer.clusterNamespace" . }} 네임스페이스의 Secret을 관리합니다.
+{{- end }}
+
+접속 방법:
+{{- if .Values.ingress.enabled }}
+{{- range .Values.ingress.hosts }}
+  http{{ if $.Values.ingress.tls }}s{{ end }}://{{ .host }}
+{{- end }}
+{{- else if eq .Values.service.type "LoadBalancer" }}
+  kubectl get svc -n {{ .Release.Namespace }} {{ include "vaultviewer.fullname" . }} -w
+{{- else }}
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "vaultviewer.fullname" . }} {{ .Values.service.port }}:{{ .Values.service.port }}
+  http://localhost:{{ .Values.service.port }}
+{{- end }}
+
+{{- if and (not .Values.session.existingSecret) }}
+
+참고: session.existingSecret을 지정하지 않아 세션 서명 키가 파드 재시작마다 새로 생성됩니다 —
+재배포/재시작 시 모든 사용자가 다시 로그인해야 합니다. 지속되는 세션이 필요하면
+session.existingSecret을 설정하세요.
+{{- end }}

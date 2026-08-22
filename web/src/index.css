@@ -1,0 +1,157 @@
+@import "tailwindcss";
+
+/* Design tokens ported from the VaultViewer Claude Design canvas
+   (Industry design system): claude.ai/design/p/89672d4d-...
+   /_ds/industry-.../styles.css */
+@theme {
+  --color-bg: #f2f2f3;
+  --color-surface: #e9e9ea;
+  --color-text: #1d1f20;
+  --color-accent: #7c6bab;
+  --color-accent-2: #9b8fc4;
+  --color-divider: color-mix(in srgb, #1d1f20 16%, transparent);
+
+  --color-accent-100: #f1eefa;
+  --color-accent-800: #453a6b;
+
+  --font-heading: "Barlow Condensed", "Noto Sans KR", system-ui, sans-serif;
+  --font-body: "Barlow", "Noto Sans KR", system-ui, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+body {
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-body);
+}
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-heading);
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  margin: 0;
+}
+
+.text-muted { color: color-mix(in srgb, var(--color-text) 55%, transparent); }
+
+/* — buttons — */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  cursor: pointer; text-decoration: none; white-space: nowrap;
+  font-family: var(--font-heading); font-weight: 600; font-size: 14px; line-height: 1.2;
+  color: var(--color-text);
+  background: transparent; border: 1px solid var(--color-divider);
+  padding: 8px 14px; border-radius: 0;
+}
+.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.btn-primary { background: var(--color-accent); color: var(--color-bg); border-color: var(--color-accent); }
+.btn-primary:hover:not(:disabled) { background: #675a92; }
+.btn-secondary:hover:not(:disabled) { background: color-mix(in srgb, var(--color-text) 7%, transparent); }
+.btn-ghost { border-color: transparent; color: var(--color-accent); padding-inline: 4px; }
+.btn-ghost:hover:not(:disabled) { background: color-mix(in srgb, var(--color-accent) 10%, transparent); }
+.btn-block { width: 100%; }
+
+/* — forms — */
+.field > label { display: block; font-size: 12px; margin-bottom: 5px; color: color-mix(in srgb, var(--color-text) 70%, transparent); }
+.input {
+  width: 100%; min-height: 36px; padding: 6px 10px; font: inherit; font-size: 14px;
+  color: var(--color-text); caret-color: var(--color-accent);
+  background: var(--color-surface); border: 1px solid var(--color-divider); border-radius: 0;
+}
+.input:hover { border-color: color-mix(in srgb, var(--color-text) 45%, transparent); }
+.input:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 0; border-color: var(--color-accent); }
+.input:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.seg { display: inline-flex; overflow: hidden; border: 1px solid var(--color-divider); }
+.seg-opt { display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; font-size: 13px; cursor: pointer; }
+.seg-opt + .seg-opt { border-left: 1px solid var(--color-divider); }
+.seg-opt:has(input:checked) { background: var(--color-accent); color: var(--color-bg); }
+.seg-opt:not(:has(input:checked)):hover { background: color-mix(in srgb, var(--color-text) 7%, transparent); }
+.seg-opt input { position: absolute; opacity: 0; width: 0; height: 0; pointer-events: none; }
+
+/* — tags — */
+.tag { display: inline-flex; align-items: center; font-size: 11px; letter-spacing: 0.02em; padding: 3px 10px; }
+.tag-accent { background: var(--color-accent-100); color: var(--color-accent-800); }
+.tag-neutral { background: #f5f5f8; color: #424244; }
+.tag-outline { border: 1px solid var(--color-accent); color: var(--color-accent); }
+
+/* — table — */
+.table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.table th {
+  text-align: left; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase;
+  color: color-mix(in srgb, var(--color-text) 60%, transparent);
+  padding: 8px; border-bottom: 1px solid var(--color-divider);
+}
+.table td { padding: 8px; border-bottom: 1px solid color-mix(in srgb, var(--color-text) 8%, transparent); vertical-align: middle; }
+.table tbody tr:hover { background: color-mix(in srgb, var(--color-text) 4%, transparent); }
+
+/* — blueprint frame: registration-mark corners for callouts/empty states — */
+.blueprint { position: relative; border: 1px solid var(--color-divider); }
+.blueprint > .corner { position: absolute; width: 11px; height: 11px; color: color-mix(in srgb, var(--color-text) 55%, transparent); }
+.blueprint > .corner::before, .blueprint > .corner::after { content: ""; position: absolute; background: currentColor; }
+.blueprint > .corner::before { left: 5px; top: 0; width: 1px; height: 100%; }
+.blueprint > .corner::after { top: 5px; left: 0; width: 100%; height: 1px; }
+.blueprint > .corner.tl { top: -6px; left: -6px; }
+.blueprint > .corner.tr { top: -6px; right: -6px; }
+.blueprint > .corner.bl { bottom: -6px; left: -6px; }
+.blueprint > .corner.br { bottom: -6px; right: -6px; }
+
+/* — tree — */
+.tree-row {
+  display: flex; align-items: center; gap: 7px; padding: 5px 20px; font-size: 13.5px;
+  color: var(--color-text); text-decoration: none; cursor: pointer; width: 100%; text-align: left;
+  background: none; border: none; font-family: var(--font-mono);
+}
+.tree-row:hover { background: color-mix(in srgb, var(--color-text) 6%, transparent); }
+.tree-row.selected { background: var(--color-accent); color: var(--color-bg); }
+
+.mono { font-family: var(--font-mono); }
+
+/* — rendered markdown (Obsidian notes) — */
+.md-frontmatter {
+  font-size: 12px; white-space: pre-wrap; color: color-mix(in srgb, var(--color-text) 65%, transparent);
+  background: var(--color-surface); border: 1px solid var(--color-divider); padding: 12px 14px; margin: 0 0 24px;
+}
+.md-body { font-size: 15px; line-height: 1.65; max-width: 760px; }
+.md-body h1, .md-body h2, .md-body h3, .md-body h4 { margin: 1.4em 0 0.5em; }
+.md-body h1:first-child, .md-body h2:first-child, .md-body h3:first-child { margin-top: 0; }
+.md-body p { margin: 0 0 1em; }
+.md-body ul, .md-body ol { margin: 0 0 1em; padding-left: 1.4em; }
+.md-body li { margin: 0.25em 0; }
+.md-body img { margin: 0.5em 0; }
+.md-body hr { border: none; border-top: 1px solid var(--color-divider); margin: 2em 0; }
+.md-body code {
+  font-family: var(--font-mono); font-size: 0.9em; background: var(--color-surface);
+  padding: 0.1em 0.4em; border: 1px solid var(--color-divider);
+}
+.md-body pre {
+  font-family: var(--font-mono); font-size: 13px; background: var(--color-surface);
+  border: 1px solid var(--color-divider); padding: 14px; overflow-x: auto; margin: 0 0 1em;
+}
+.md-body pre code { border: none; padding: 0; background: none; }
+.md-body table { width: 100%; border-collapse: collapse; font-size: 14px; margin: 0 0 1em; }
+.md-body th {
+  text-align: left; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase;
+  color: color-mix(in srgb, var(--color-text) 60%, transparent);
+  padding: 8px; border-bottom: 1px solid var(--color-divider);
+}
+.md-body td { padding: 8px; border-bottom: 1px solid color-mix(in srgb, var(--color-text) 8%, transparent); }
+.md-quote {
+  margin: 0 0 1em; padding: 4px 16px; border-left: 3px solid var(--color-divider);
+  color: color-mix(in srgb, var(--color-text) 70%, transparent);
+}
+.callout {
+  margin: 0 0 1.2em; padding: 12px 16px; background: color-mix(in srgb, var(--color-accent) 6%, transparent);
+  border-left: 3px solid var(--color-accent);
+}
+.callout-body > p:last-child { margin-bottom: 0; }
+.wikilink {
+  background: none; border: none; padding: 0; cursor: pointer; font: inherit;
+  color: var(--color-accent); text-decoration: underline; text-underline-offset: 3px;
+}
+.wikilink:hover { color: var(--color-accent-800); }
+.mermaid-diagram {
+  margin: 0 0 1.2em; padding: 16px; background: var(--color-bg);
+  border: 1px solid var(--color-divider); overflow-x: auto; text-align: center;
+}
+.mermaid-diagram svg { max-width: 100%; }

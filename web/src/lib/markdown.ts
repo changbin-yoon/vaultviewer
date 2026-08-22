@@ -1,0 +1,102 @@
+// Preprocessing for Obsidian-flavored Markdown: standard remark/GFM doesn't
+// understand wikilinks, embeds, or callouts, so we rewrite them into plain
+// markdown constructs (real links, a sentinel-marked blockquote paragraph)
+// before handing the string to react-markdown.
+
+export interface ParsedDoc {
+  frontmatter: string | null;
+  body: string;
+}
+
+// Obsidian notes commonly start with a "---\n...\n---" YAML block. We don't
+// parse it (no YAML dependency) — just split it off so it can be shown as
+// raw metadata instead of breaking the markdown renderer (a bare "---"
+// otherwise parses as a thematic break with stray text below it).
+export function splitFrontmatter(raw: string): ParsedDoc {
+  const match = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/.exec(raw);
+  if (!match) return { frontmatter: null, body: raw };
+  return { frontmatter: match[1], body: raw.slice(match[0].length) };
+}
+
+const IMAGE_EXT = /\.(png|jpe?g|gif|svg|webp|bmp)$/i;
+
+// Folders used purely to store uploaded images/attachments (see
+// MarkdownDocument's image upload, which always targets "attachments/")
+// aren't meant to be browsed directly — the tree and folder browser both
+// hide them.
+export function isManagedFolderName(name: string): boolean {
+  return name.toLowerCase() === "attachments";
+}
+
+// Obsidian never shows the ".md" extension in its own UI — match that here.
+// Display-only: strips a trailing ".md" from a name or full path (the
+// underlying file path used for API calls always keeps the real extension).
+export function stripMdExtension(nameOrPath: string): string {
+  return nameOrPath.replace(/\.md$/i, "");
+}
+
+// [[target]] / [[target|Alias]] / [[target#heading|Alias]] -> a real
+// markdown link the custom `a` renderer intercepts by its "wikilink:" and
+// "embed:" pseudo-schemes, since remark otherwise leaves "[[...]]" as
+// literal text.
+export function preprocessObsidian(md: string): string {
+  let out = preprocessCallouts(md);
+
+  // Embeds: ![[file]] or ![[file|alt]]
+  out = out.replace(/!\[\[([^\]|#]+)(#[^\]|]+)?(\|([^\]]+))?\]\]/g, (_m, target, _anchor, _p, alias) => {
+    const t = (target as string).trim();
+    const label = (alias as string | undefined)?.trim() || t;
+    return `![${label}](embed:${encodeURIComponent(t)})`;
+  });
+
+  // Wikilinks: [[file]] or [[file|alias]]
+  out = out.replace(/\[\[([^\]|#]+)(#[^\]|]+)?(\|([^\]]+))?\]\]/g, (_m, target, _anchor, _p, alias) => {
+    const t = (target as string).trim();
+    const label = (alias as string | undefined)?.trim() || t;
+    return `[${label}](wikilink:${encodeURIComponent(t)})`;
+  });
+
+  return out;
+}
+
+// Rewrites "> [!type] Title" callout headers into a sentinel paragraph
+// ("%%CALLOUT:type:Title%%") followed by a blank quote line, which forces
+// remark to split the header into its own paragraph within the blockquote
+// so the Blockquote component can pull it out and style the box.
+function preprocessCallouts(md: string): string {
+  return md.replace(/^> ?\[!(\w+)\]([^\n]*)$/gm, (_m, type, title) => {
+    return `> %%CALLOUT:${type}:${(title as string).trim()}%%\n>`;
+  });
+}
+
+export function isImageTarget(target: string): boolean {
+  return IMAGE_EXT.test(target);
+}
+
+// Raw [[target]] / [[target#heading|alias]] references in a note's text,
+// note-links only (attachment embeds are excluded, matching Obsidian's
+// graph view). Used to build the graph view's edge list.
+export function extractWikilinkTargets(raw: string): string[] {
+  const targets: string[] = [];
+  const re = /!?\[\[([^\]|#]+)(#[^\]|]+)?(\|[^\]]+)?\]\]/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(raw))) {
+    const target = m[1].trim();
+    if (!isImageTarget(target)) targets.push(target);
+  }
+  return targets;
+}
+
+// Resolves a wikilink/embed target to a vault-relative path (matching the
+// FileItem.path format used elsewhere). Obsidian omits the .md extension
+// and allows bare filenames resolved from anywhere in the vault; we only
+// support the common cases: an explicit vault-relative path, or a bare
+// name relative to the current file's directory.
+export function resolveLinkTarget(target: string, currentDir: string, forEmbed: boolean): string {
+  const clean = decodeURIComponent(target).replace(/^\.?\//, "");
+  const hasExt = /\.[a-z0-9]+$/i.test(clean);
+  const withExt = hasExt ? clean : `${clean}.md`;
+  if (clean.includes("/")) return withExt;
+  if (forEmbed && !hasExt) return withExt; // rare: bare markdown embed name
+  return currentDir ? `${currentDir}/${withExt}` : withExt;
+}

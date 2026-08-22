@@ -1,0 +1,6 @@
+apiVersion: v2
+name: vaultviewer
+description: LDAP 기반 RBAC를 지원하는 시크릿/볼트 뷰어 (로컬 파일 모드 & 쿠버네티스 클러스터 모드)
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

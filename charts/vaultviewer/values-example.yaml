@@ -1,0 +1,81 @@
+# Starter values for a fresh VaultViewer install. Copy this file, fill in
+# the placeholders, and deploy with:
+#
+#   helm install vaultviewer charts/vaultviewer -f my-values.yaml
+#
+# This file has no secrets in it on purpose — create the two Secrets below
+# first (or point existingSecret at ones you already manage).
+#
+#   kubectl create secret generic vaultviewer-ldap \
+#     --from-literal=bind-password='<your LDAP service account password>'
+#   kubectl create secret generic vaultviewer-session \
+#     --from-literal=session-secret="$(openssl rand -hex 32)"
+
+# local: a directory (PVC-backed) is mounted and browsed/edited directly.
+# cluster: Kubernetes Secrets in cluster.namespace are browsed/edited
+#          instead — see values.yaml's `cluster:` section.
+mode: local
+
+# UI에 표시될 배지 텍스트(앱 이름 옆). 스토리지 모드(mode)와는 무관 — 여러 클러스터에
+# 나눠 배포한다면 각 values 파일마다 클러스터 이름으로 바꿔서 구분하면 된다.
+# 기본값은 "CLUSTER". (로컬 바이너리/도커로 띄울 땐 이 값 자체가 없으므로 "LOCAL".)
+deploymentLabel: "CLUSTER"
+
+local:
+  persistence:
+    enabled: true
+    size: 5Gi
+    mountPath: /data
+    # storageClass: ""   # leave unset to use your cluster's default
+
+ldap:
+  host: "ldap.example.com"          # or an in-cluster Service DNS name
+  port: 389
+  baseDN: "dc=example,dc=com"
+  bindDN: "cn=admin,dc=example,dc=com"
+  existingSecret: vaultviewer-ldap
+  existingSecretKey: bind-password
+  # Map your directory's actual LDAP group CNs to VaultViewer's three
+  # roles. The keys (adm/dev/view) must stay as-is; only change the values.
+  # 값은 문자열(그룹 1개) 또는 리스트(그룹 여러 개, 모두 같은 역할 부여) 둘 다 가능:
+  #   adm:
+  #     - "dt-bi-adm"
+  #     - "platform-admins"
+  groupRoleMap:
+    adm: "adm"
+    dev: "dev"
+    view: "view"
+
+session:
+  existingSecret: vaultviewer-session
+  existingSecretKey: session-secret
+
+# PVC 데이터를 S3/MinIO로 주기적으로 백업하고 싶다면 주석 해제 (mode: local 전용).
+# 먼저 Access Key/Secret Key로 Secret부터 만들 것:
+#
+#   kubectl create secret generic vaultviewer-s3 \
+#     --from-literal=access-key='<MinIO access key>' \
+#     --from-literal=secret-key='<MinIO secret key>'
+#
+# backup:
+#   enabled: true
+#   endpoint: "minio.minio-system.svc.cluster.local:9000"
+#   bucket: "vaultviewer-backup"
+#   useSSL: false
+#   intervalMinutes: 30       # 이 주기마다 검사, 바뀐 파일만 업로드
+#   existingSecret: vaultviewer-s3
+
+# Uncomment to expose without an Ingress controller — reachable at
+# <any-node-ip>:<assigned-nodePort> with no DNS required.
+# service:
+#   type: NodePort
+
+# Uncomment once you have an Ingress controller and a resolvable hostname.
+# ingress:
+#   enabled: true
+#   className: nginx
+#   hosts:
+#     - host: vaultviewer.example.com
+#       paths:
+#         - path: /
+#           pathType: Prefix

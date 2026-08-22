@@ -1,0 +1,166 @@
+# Default values for vaultviewer.
+
+image:
+  repository: yoochabi/vaultviewer
+  tag: "0.1.12"
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+replicaCount: 1
+
+# VAULTVIEWER_MODE: how the server reads/writes secrets.
+#   local   — a directory mounted into the container (see `local.persistence`).
+#   cluster — Kubernetes Secrets in `cluster.namespace`, via the pod's own
+#             service account (see `cluster.rbac`).
+mode: local
+
+# UI 배지 텍스트 (앱 이름 옆, 좌측 상단). `mode`(스토리지 백엔드)와는 별개 개념 —
+# mode: local이어도 실제로는 쿠버네티스에 떠 있을 수 있으므로, "어디서 돌고 있는지"를
+# 보여주는 용도로 분리했다. 여러 클러스터에 배포한다면 클러스터 이름으로 바꿔서 구분
+# 가능 (예: "CLUSTER-PROD"). 로컬 바이너리/도커로 띄우면(이 값을 안 건드리면) "LOCAL".
+deploymentLabel: "CLUSTER"
+
+# -- LOCAL mode --------------------------------------------------------
+local:
+  persistence:
+    enabled: true
+    # Set to reuse an existing PVC instead of letting the chart create one.
+    existingClaim: ""
+    storageClass: ""
+    accessMode: ReadWriteOnce
+    size: 5Gi
+    mountPath: /data
+
+# -- CLUSTER mode --------------------------------------------------------
+cluster:
+  # Namespace whose Secrets are browsed/edited. Defaults to the release
+  # namespace when empty.
+  namespace: ""
+  rbac:
+    # Grants the pod's ServiceAccount get/list/create/update/patch/delete
+    # on Secrets in `cluster.namespace` — required for cluster mode to work.
+    create: true
+
+# -- LDAP authentication -------------------------------------------------
+# Every VaultViewer role (adm/dev/view) is resolved from LDAP group
+# membership; see internal/auth/config.go. Values here map 1:1 to the
+# server's VAULTVIEWER_LDAP_* environment variables.
+ldap:
+  host: ""
+  port: 389
+  tls: false
+  baseDN: ""
+  userOU: "ou=users"
+  groupOU: "ou=groups"
+  bindDN: ""
+
+  # Bind password — prefer existingSecret over bindPasswordValue. A value
+  # checked into a values file is a hardcoded credential; existingSecret
+  # keeps it out of the chart entirely.
+  existingSecret: ""
+  existingSecretKey: "bind-password"
+  # Only for quick local testing — leave empty and use existingSecret above
+  # for anything real.
+  bindPasswordValue: ""
+
+  # LDAP group CN -> VaultViewer role. Change the values (not the keys) to
+  # match your directory's actual group names. Each value may be a single
+  # string or a list — a list maps multiple LDAP groups onto the same role
+  # (e.g. both "dt-bi-adm" and "platform-admins" granting adm).
+  groupRoleMap:
+    adm: "adm"
+    dev: "dev"
+    view: "view"
+    # 여러 LDAP 그룹을 같은 역할에 매핑하고 싶다면 리스트로 작성:
+    # adm:
+    #   - "dt-bi-adm"
+    #   - "platform-admins"
+
+# -- Session tokens --------------------------------------------------------
+session:
+  # HMAC signing key for session tokens. If neither existingSecret nor a
+  # generated one is provided, the server falls back to a random ephemeral
+  # key at startup — sessions won't survive a pod restart. Set an
+  # existingSecret for persistent sessions across restarts/rollouts.
+  existingSecret: ""
+  existingSecretKey: "session-secret"
+  ttlHours: 8
+
+# -- S3/MinIO 백업 --------------------------------------------------------
+# mode: local일 때만 적용됨 (마운트된 디렉토리를 그대로 미러링하는 방식이라 —
+# cluster 모드는 데이터가 이미 Kubernetes Secret/etcd에 있어서 대상이 아님).
+# enabled: false가 기본값이라 아무것도 설정 안 하면 완전히 비활성 상태.
+backup:
+  enabled: false
+  # MinIO/S3 엔드포인트, 예: "minio.minio-system.svc.cluster.local:9000"
+  endpoint: ""
+  bucket: ""
+  region: "us-east-1"
+  useSSL: false
+  # 버킷 안에서 이 릴리스 데이터를 구분할 접두사. 비워두면 릴리스 이름을 사용 —
+  # 같은 버킷을 여러 VaultViewer 릴리스가 공유해도 서로 덮어쓰지 않음.
+  prefix: ""
+  # 몇 분마다 동기화할지. 그날 날짜 프리픽스(YYYY-MM-DD) 아래에서 바뀌었거나
+  # 새로 생긴 파일만 업로드함(로컬 MD5 vs S3 ETag 비교) — 지난 날짜의 백업은
+  # 절대 건드리지 않음(=날짜별로 독립된 복구 지점).
+  intervalMinutes: 30
+  # Access Key/Secret Key는 여기 직접 쓰지 말고 미리 Secret으로 만들어서
+  # existingSecret으로 참조할 것 (ldap.existingSecret과 동일한 패턴).
+  existingSecret: ""
+  existingSecretAccessKeyKey: "access-key"
+  existingSecretSecretKeyKey: "secret-key"
+
+# -- Networking --------------------------------------------------------
+service:
+  type: ClusterIP
+  port: 8080
+  # Only used when type: NodePort. Leave empty to let Kubernetes assign a
+  # random port from the cluster's nodePort range (changes on every
+  # uninstall/reinstall) — set it to pin a stable port instead.
+  nodePort: ""
+
+# Origin allowed to call the API cross-origin (only relevant if you run the
+# frontend separately from this server; the default same-origin deployment
+# doesn't need this).
+cors:
+  origin: ""
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: vaultviewer.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+podAnnotations: {}
+podSecurityContext:
+  runAsNonRoot: true
+  fsGroup: 65532
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: false
+  capabilities:
+    drop: ["ALL"]
+
+resources: {}
+# resources:
+#   requests:
+#     cpu: 100m
+#     memory: 128Mi
+#   limits:
+#     memory: 256Mi
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
