@@ -47,6 +47,7 @@ export function GraphView({ onNavigate }: { onNavigate: (path: string) => void }
   const [data, setData] = useState<VaultIndex | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [hovered, setHovered] = useState<string | null>(null);
+  const [selected, setSelected] = useState<SimNode | null>(null);
   const [view, setView] = useState({ scale: 1, x: 0, y: 0 });
   const dragState = useRef<{ startX: number; startY: number; viewX: number; viewY: number } | null>(null);
 
@@ -114,28 +115,60 @@ export function GraphView({ onNavigate }: { onNavigate: (path: string) => void }
         <h4>그래프 뷰</h4>
         <span className="text-xs text-muted">노트 {data.nodes.filter((n) => n.resolved).length}개 · 링크 {edges.length}개</span>
       </div>
-      {types.length > 0 && (
-        <div
-          className="absolute top-16 right-6 flex flex-col gap-1.5 p-3 text-xs"
-          style={{ background: "var(--color-bg)", border: "1px solid var(--color-divider)" }}
-        >
-          {types.map((type) => (
-            <div key={type} className="flex items-center gap-2">
+      <div className="absolute top-16 right-6 flex flex-col items-end gap-3">
+        {selected && (
+          <div
+            className="flex flex-col gap-2 p-3 text-xs"
+            style={{ background: "var(--color-bg)", border: "1px solid var(--color-divider)", width: 200 }}
+          >
+            <div className="flex items-center gap-2">
               <span
                 style={{
                   width: 9,
                   height: 9,
                   borderRadius: "50%",
-                  background: colorForType(type),
+                  background: selected.type ? colorForType(selected.type) : "var(--color-accent)",
                   display: "inline-block",
                   flexShrink: 0,
                 }}
               />
-              <span>{type}</span>
+              <span className="truncate" title={selected.name.replace(/\.md$/, "")}>
+                {selected.name.replace(/\.md$/, "")}
+              </span>
             </div>
-          ))}
-        </div>
-      )}
+            <div className="flex gap-2">
+              <button className="btn btn-primary" style={{ flex: 1 }} onClick={() => onNavigate(selected.id)}>
+                페이지 열기
+              </button>
+              <button className="btn btn-secondary" onClick={() => setSelected(null)}>
+                ✕
+              </button>
+            </div>
+          </div>
+        )}
+        {types.length > 0 && (
+          <div
+            className="flex flex-col gap-1.5 p-3 text-xs"
+            style={{ background: "var(--color-bg)", border: "1px solid var(--color-divider)" }}
+          >
+            {types.map((type) => (
+              <div key={type} className="flex items-center gap-2">
+                <span
+                  style={{
+                    width: 9,
+                    height: 9,
+                    borderRadius: "50%",
+                    background: colorForType(type),
+                    display: "inline-block",
+                    flexShrink: 0,
+                  }}
+                />
+                <span>{type}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
       <svg
         viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
         className="w-full grow"
@@ -145,6 +178,7 @@ export function GraphView({ onNavigate }: { onNavigate: (path: string) => void }
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerLeave={onPointerUp}
+        onClick={() => setSelected(null)}
       >
         <g transform={`translate(${view.x} ${view.y}) scale(${view.scale})`}>
           {edges.map((e, i) => {
@@ -173,7 +207,11 @@ export function GraphView({ onNavigate }: { onNavigate: (path: string) => void }
                 style={{ cursor: n.resolved ? "pointer" : "default" }}
                 onMouseEnter={() => setHovered(n.id)}
                 onMouseLeave={() => setHovered(null)}
-                onClick={() => n.resolved && onNavigate(n.id)}
+                onClick={(e) => {
+                  if (!n.resolved) return;
+                  e.stopPropagation();
+                  setSelected(n);
+                }}
               >
                 <circle
                   r={r}
