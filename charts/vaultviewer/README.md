@@ -52,10 +52,14 @@ helm install vaultviewer charts/vaultviewer -f my-values.yaml
 ## 예제 데이터로 시작하기 (local 모드)
 
 빈 볼트로 시작하면 아무것도 안 보입니다. `examples/vault-seed/`에 콜아웃·표·
-Mermaid·위키링크·백링크를 보여주는 최소 예제 노트가 있습니다:
+Mermaid·위키링크·백링크를 보여주는 최소 예제 노트가 있습니다. 별도 데모
+릴리스로 띄우고 싶다면 [`values-demo.yaml`](./values-demo.yaml)을 참고하세요
+(NodePort 고정, 기존 LDAP/세션 Secret 재사용):
 
 ```bash
-POD=$(kubectl get pod -l app.kubernetes.io/instance=vaultviewer -o jsonpath='{.items[0].metadata.name}')
+helm install vaultviewer-demo charts/vaultviewer -f charts/vaultviewer/values-demo.yaml
+
+POD=$(kubectl get pod -l app.kubernetes.io/instance=vaultviewer-demo -o jsonpath='{.items[0].metadata.name}')
 kubectl cp examples/vault-seed/. "$POD:/data"
 ```
 
@@ -65,6 +69,12 @@ kubectl cp examples/vault-seed/. "$POD:/data"
 # Ingress를 안 쓰거나 DNS가 아직 없다면 NodePort로:
 helm upgrade vaultviewer charts/vaultviewer -f my-values.yaml --set service.type=NodePort
 kubectl get svc vaultviewer   # 할당된 nodePort 확인 → http://<노드IP>:<nodePort>
+
+# nodePort를 지정 안 하면 재배포마다 랜덤 포트로 바뀐다 — 고정하려면
+# service.nodePort도 같이 지정 (values-demo.yaml 참고):
+#   service:
+#     type: NodePort
+#     nodePort: 31455
 
 # 또는 즉석 확인용 포트포워드:
 kubectl port-forward svc/vaultviewer 8080:8080

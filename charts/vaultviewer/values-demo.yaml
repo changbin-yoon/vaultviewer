@@ -1,0 +1,37 @@
+# vaultviewer-demo 릴리스용 배포 값 — examples/vault-seed/ 예제 데이터를 담아
+# 기능을 보여주는 용도의 테스트 릴리스. 자격 증명은 여기 없음 — LDAP bind
+# 비밀번호/세션 시크릿은 vaultviewer-ldap/vaultviewer-session Secret을 재사용.
+#
+#   kubectl cp examples/vault-seed/. "$POD:/data"
+#
+# 로 시드 데이터를 넣고 helm upgrade vaultviewer-demo charts/vaultviewer
+#   -f charts/vaultviewer/values-demo.yaml 로 배포.
+
+mode: local
+
+local:
+  persistence:
+    enabled: true
+    size: 1Gi
+    mountPath: /data
+
+ldap:
+  host: openldap.vaultviewer-test.svc.cluster.local
+  port: 389
+  baseDN: "dc=example,dc=com"
+  bindDN: "cn=admin,dc=example,dc=com"
+  existingSecret: vaultviewer-ldap
+  existingSecretKey: bind-password
+  groupRoleMap:
+    adm: "adm"
+    dev: "dev"
+    view: "view"
+
+session:
+  existingSecret: vaultviewer-session
+  existingSecretKey: session-secret
+
+# vaultviewer 릴리스(31455)와 겹치지 않는 고정 포트.
+service:
+  type: NodePort
+  nodePort: 31456

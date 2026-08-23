@@ -13,6 +13,14 @@ VaultViewer의 주요 변경 사항을 최신순으로 기록합니다. 버전 �
   응답하지 않는 등 인프라 오류는 실패 횟수에 포함하지 않음(사용자 잘못이
   아니므로). 15분간 추가 실패가 없으면 카운트 초기화
 
+## 배포 설정
+
+- `vaultviewer`/`vaultviewer-demo` 두 릴리스 모두 NodePort 고정
+  (`vaultviewer`=31455, `vaultviewer-demo`=31456) — 지정 안 하면 재배포마다
+  랜덤 포트로 바뀌던 문제 해결
+- `values-demo.yaml`을 정식으로 커밋 — `vaultviewer-demo` 릴리스(예제 시드
+  데이터 데모용)를 재현 가능하게 관리
+
 ## 저장소 관리
 
 - GitHub Actions CI 추가 — push/PR마다 Go `build`/`vet`/`test`/`gofmt` 검사와
