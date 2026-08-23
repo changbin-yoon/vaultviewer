@@ -62,18 +62,13 @@ func MatchSnippet(content []byte, query string) (string, bool) {
 	return snippet, true
 }
 
-// WalkAndSearch performs a generic full-text search over every searchable
-// file reachable from engine, using only List and Read — so any backend
-// can implement Search in one line by delegating here. A backend can
-// still implement its own Search directly for a more efficient search
-// (e.g. a future Git backend using `git grep`).
-func WalkAndSearch(engine VaultStorageEngine, query string) ([]model.SearchResult, error) {
-	query = strings.TrimSpace(query)
-	if query == "" {
-		return nil, nil
-	}
-
-	var results []model.SearchResult
+// WalkFiles visits every non-directory file reachable from engine (via
+// recursive List calls) for which include(name) is true, calling fn with
+// its path and content. A single unreadable file doesn't abort the walk —
+// callers that want a "best effort" scan across the whole vault (search,
+// building the ontology graph, ...) shouldn't have one bad file take down
+// the rest. Shared here so tree-walking isn't reimplemented per caller.
+func WalkFiles(engine VaultStorageEngine, include func(name string) bool, fn func(path string, content []byte) error) error {
 	var walk func(path string) error
 	walk = func(path string) error {
 		items, err := engine.List(path)
@@ -87,21 +82,41 @@ func WalkAndSearch(engine VaultStorageEngine, query string) ([]model.SearchResul
 				}
 				continue
 			}
-			if !Searchable(item.Name) {
+			if !include(item.Name) {
 				continue
 			}
 			file, err := engine.Read(item.Path)
 			if err != nil {
-				// A single unreadable file shouldn't fail the whole search.
 				continue
 			}
-			if snippet, ok := MatchSnippet(file.Content, query); ok {
-				results = append(results, model.SearchResult{Path: item.Path, Snippet: snippet})
+			if err := fn(item.Path, file.Content); err != nil {
+				return err
 			}
 		}
 		return nil
 	}
-	if err := walk(""); err != nil {
+	return walk("")
+}
+
+// WalkAndSearch performs a generic full-text search over every searchable
+// file reachable from engine, using only List and Read — so any backend
+// can implement Search in one line by delegating here. A backend can
+// still implement its own Search directly for a more efficient search
+// (e.g. a future Git backend using `git grep`).
+func WalkAndSearch(engine VaultStorageEngine, query string) ([]model.SearchResult, error) {
+	query = strings.TrimSpace(query)
+	if query == "" {
+		return nil, nil
+	}
+
+	var results []model.SearchResult
+	err := WalkFiles(engine, Searchable, func(path string, content []byte) error {
+		if snippet, ok := MatchSnippet(content, query); ok {
+			results = append(results, model.SearchResult{Path: path, Snippet: snippet})
+		}
+		return nil
+	})
+	if err != nil {
 		return nil, err
 	}
 	return results, nil

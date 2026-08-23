@@ -3,6 +3,19 @@
 VaultViewer의 주요 변경 사항을 최신순으로 기록합니다. 버전 번호는 Docker 이미지 태그
 (`yoochabi/vaultviewer:<version>`)이자 Helm 차트의 `appVersion`입니다.
 
+## 0.1.34
+
+- 기능 추가: `GET /api/graph` — 볼트 전체의 노드/타입 있는 관계를 JSON으로
+  반환하는 새 읽기 전용 엔드포인트(모든 인증된 역할 접근 가능, view 포함).
+  AI agent나 MCP 서버처럼 프론트엔드가 아닌 외부 소비자가 온톨로지를 쓸 때,
+  모든 노트를 직접 읽고 프론트매터를 다시 파싱하지 않아도 되도록 함.
+  프론트매터/위키링크 파싱(`internal/ontology`)을 `web/src/lib/{markdown,
+  vaultIndex}.ts`와 동일한 규칙으로 Go에 새로 작성 — 0.1.33에서 고친
+  "관계 필드의 위키링크가 중복 카운트되는" 버그도 처음부터 반영. 트리
+  순회는 `internal/storage`의 `WalkAndSearch`가 쓰던 로직을 `WalkFiles`로
+  뽑아 재사용(순수 리팩터, 동작 변화 없음). 프론트엔드 그래프 뷰는 변경
+  없음 — 이 엔드포인트는 외부 소비자 전용
+
 ## 0.1.33
 
 - 버그 수정: 타입 있는 관계(0.1.32)를 쓴 노트의 그래프 링크 수가 부풀려지던

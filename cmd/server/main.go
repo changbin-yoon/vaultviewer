@@ -24,6 +24,7 @@ import (
 	"github.com/vaultviewer/vaultviewer/internal/auth"
 	"github.com/vaultviewer/vaultviewer/internal/backup"
 	"github.com/vaultviewer/vaultviewer/internal/model"
+	"github.com/vaultviewer/vaultviewer/internal/ontology"
 	"github.com/vaultviewer/vaultviewer/internal/storage"
 	"github.com/vaultviewer/vaultviewer/internal/storage/git"
 	"github.com/vaultviewer/vaultviewer/internal/storage/k8s"
@@ -160,6 +161,21 @@ func main() {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(results)
+	}))
+
+	// The vault-wide note graph (nodes + typed/untyped edges), for
+	// consumers other than the frontend's own graph view — an AI agent,
+	// a script, an MCP server — that want the ontology without fetching
+	// every note and re-parsing frontmatter/wikilinks themselves. Read
+	// access only, same tier as /api/tree and /api/search.
+	mux.HandleFunc("/api/graph", auth.RequireAuth(sm, func(w http.ResponseWriter, r *http.Request, _ model.User) {
+		graph, err := ontology.Build(engine)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(graph)
 	}))
 
 	mux.HandleFunc("/api/namespace", auth.RequireWrite(sm, func(w http.ResponseWriter, r *http.Request, user model.User) {

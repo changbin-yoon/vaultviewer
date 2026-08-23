@@ -183,6 +183,36 @@ local:
 - 빈 디렉토리(네임스페이스만 만들고 파일이 없는 경우)는 git이 표현할 수 없어
   커밋되지 않습니다 — 그 안에 첫 파일이 저장돼야 git에 나타납니다.
 
+## `/api/graph` — 온톨로지를 외부에서 쓰기 (AI agent 연동 등)
+
+볼트 전체의 노드/타입 있는 관계를 JSON으로 반환하는 읽기 전용
+엔드포인트입니다(로그인한 사용자라면 역할 무관, view 포함 모두 접근
+가능). 프론트엔드 그래프 뷰와 별개로, AI agent나 MCP 서버처럼 VaultViewer
+바깥의 소비자가 "이 컴포넌트가 죽으면 뭐가 영향받나" 같은 질문에 답하려고
+할 때 모든 노트를 직접 읽고 프론트매터를 다시 파싱하지 않아도 되도록
+만든 API입니다. 로컬 mode/cluster mode 모두 동작(백엔드가 이미 읽는
+`VaultStorageEngine`을 그대로 사용).
+
+```bash
+TOKEN=$(curl -s -X POST http://<host>/api/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"...","password":"..."}' | jq -r .token)
+
+curl -s http://<host>/api/graph -H "Authorization: Bearer $TOKEN" | jq
+```
+
+```json
+{
+  "nodes": [{"id": "01-예제/Trino.md", "name": "Trino.md", "resolved": true, "type": "component"}],
+  "edges": [{"source": "01-예제/Trino.md", "target": "01-예제/HMS-메타스토어.md", "relation": "depends_on"}]
+}
+```
+
+`relation`이 없는 엣지는 노트 본문의 평범한 `[[위키링크]]`, 있으면
+프론트매터로 선언한 타입 있는 관계입니다. 관계 문법 자체는 볼트 안
+"작성가이드" 탭 또는 `examples/vault-seed/01-예제/온톨로지-사전.md`
+참고.
+
 ## 모드별 참고사항
 
 - **local**: `local.persistence`로 PVC를 만들거나(`existingClaim`) 기존 PVC를 재사용합니다.
