@@ -3,7 +3,13 @@ import ReactMarkdown, { defaultUrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import * as api from "../lib/api";
 import type { AuditLog, FileItem } from "../lib/api";
-import { splitFrontmatter, preprocessObsidian, resolveLinkTarget, stripMdExtension } from "../lib/markdown";
+import {
+  splitFrontmatter,
+  preprocessObsidian,
+  resolveLinkTarget,
+  renameWikilinkReferences,
+  stripMdExtension,
+} from "../lib/markdown";
 import { useAuth, canWrite, canDelete } from "../lib/auth";
 import { getVaultIndex } from "../lib/vaultIndex";
 import { MermaidDiagram } from "./MermaidDiagram";
@@ -16,6 +22,7 @@ const ACTION_CLASS: Record<string, string> = {
   create: "tag tag-neutral",
   update: "tag tag-accent",
   delete: "tag tag-neutral",
+  rename: "tag tag-accent",
 };
 
 function urlTransform(url: string): string {
@@ -230,6 +237,14 @@ export function MarkdownDocument({ path, onNavigate, onMutate }: Props) {
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [confirmingRename, setConfirmingRename] = useState(false);
+  const [renameValue, setRenameValue] = useState("");
+  const [renameReason, setRenameReason] = useState("");
+  // Deliberately NOT reset by the path-change effect below — a rename
+  // navigates to the new path as its very last step, and this warning
+  // (when some backlinking note's link couldn't be rewritten) needs to
+  // survive that navigation to actually be seen.
+  const [renameWarning, setRenameWarning] = useState<string | null>(null);
   const [backlinks, setBacklinks] = useState<string[] | null>(null);
   const [uploading, setUploading] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -242,6 +257,7 @@ export function MarkdownDocument({ path, onNavigate, onMutate }: Props) {
     setEditing(false);
     setPreviewing(false);
     setConfirmingDelete(false);
+    setConfirmingRename(false);
     setShowHistory(false);
     setError(null);
     setContent(null);
@@ -283,6 +299,59 @@ export function MarkdownDocument({ path, onNavigate, onMutate }: Props) {
       void getVaultIndex(true);
     } catch {
       setError("저장에 실패했습니다.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // Renames this note within its own directory, then rewrites+re-saves
+  // every note that linked to it via [[wikilink]] so those links keep
+  // pointing at it — link rewriting happens after the rename itself
+  // succeeds, so a partial failure there (rare) leaves this note safely
+  // reachable at its new path with only some stale links, the same
+  // degraded state the graph already handles (dashed/unresolved node).
+  async function rename() {
+    const trimmed = renameValue.trim();
+    const oldBareName = stripMdExtension(name);
+    if (!trimmed || trimmed === oldBareName) {
+      setConfirmingRename(false);
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const newPath = dir ? `${dir}/${trimmed}.md` : `${trimmed}.md`;
+      await api.renameFile(path, newPath, renameReason);
+
+      const idx = await getVaultIndex();
+      const referencing = idx.backlinks.get(path) ?? [];
+      let failedRewrites = 0;
+      await Promise.all(
+        referencing.map(async (refPath) => {
+          try {
+            const file = await api.readFile(refPath);
+            const text = api.decodeContent(file.content);
+            const rewritten = renameWikilinkReferences(text, oldBareName, trimmed);
+            if (rewritten !== text) {
+              await api.saveFile(refPath, rewritten, `노트 이름 변경: ${oldBareName} → ${trimmed}`);
+            }
+          } catch {
+            failedRewrites++;
+          }
+        })
+      );
+
+      void getVaultIndex(true);
+      onMutate?.();
+      setConfirmingRename(false);
+      setRenameWarning(
+        failedRewrites > 0
+          ? `이름은 변경됐지만 이 노트를 참조하던 링크 ${failedRewrites}개는 갱신하지 못했습니다.`
+          : null
+      );
+      onNavigate(newPath);
+    } catch {
+      setError("이름 변경에 실패했습니다.");
     } finally {
       setBusy(false);
     }
@@ -389,6 +458,45 @@ export function MarkdownDocument({ path, onNavigate, onMutate }: Props) {
                 편집
               </button>
             )}
+            {!editing && canWrite(role) && !confirmingRename && (
+              <button
+                className="btn btn-secondary"
+                disabled={busy || content == null}
+                onClick={() => {
+                  setRenameValue(stripMdExtension(name));
+                  setRenameReason("");
+                  setRenameWarning(null);
+                  setConfirmingRename(true);
+                }}
+              >
+                이름 변경
+              </button>
+            )}
+            {!editing && canWrite(role) && confirmingRename && (
+              <div className="flex items-center gap-2">
+                <input
+                  className="input mono"
+                  style={{ width: 160 }}
+                  value={renameValue}
+                  onChange={(e) => setRenameValue(e.target.value)}
+                  placeholder="새 이름"
+                  autoFocus
+                />
+                <input
+                  className="input"
+                  style={{ width: 160 }}
+                  value={renameReason}
+                  onChange={(e) => setRenameReason(e.target.value)}
+                  placeholder="사유(선택)"
+                />
+                <button className="btn btn-secondary" disabled={busy || !renameValue.trim()} onClick={rename}>
+                  변경
+                </button>
+                <button className="btn btn-secondary" disabled={busy} onClick={() => setConfirmingRename(false)}>
+                  취소
+                </button>
+              </div>
+            )}
             {!editing && canDelete(role) && confirmingDelete && (
               <div className="flex items-center gap-2">
                 <span className="text-sm" style={{ color: "#b3432f" }}>
@@ -433,6 +541,9 @@ export function MarkdownDocument({ path, onNavigate, onMutate }: Props) {
                 </span>
                 <span className={ACTION_CLASS[h.action] ?? "tag tag-neutral"}>{h.action.toUpperCase()}</span>
                 <span className="mono">{h.user}</span>
+                {h.previousPath && (
+                  <span className="text-muted mono">{stripMdExtension(h.previousPath)} → {stripMdExtension(h.path)}</span>
+                )}
                 {h.reason && <span className="text-muted">— {h.reason}</span>}
               </div>
             ))}
@@ -440,6 +551,14 @@ export function MarkdownDocument({ path, onNavigate, onMutate }: Props) {
         )}
 
         {error && <p className="text-sm mb-4" style={{ color: "#b3432f" }}>{error}</p>}
+        {renameWarning && (
+          <p className="text-sm mb-4 flex items-center gap-2" style={{ color: "#b3432f" }}>
+            {renameWarning}
+            <button className="underline decoration-dotted" onClick={() => setRenameWarning(null)}>
+              닫기
+            </button>
+          </p>
+        )}
 
         {content == null && !error && <p className="text-sm text-muted">불러오는 중…</p>}
 

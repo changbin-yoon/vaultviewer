@@ -79,6 +79,46 @@ func TestEngineSaveReadListDelete(t *testing.T) {
 	}
 }
 
+func TestEngineRename(t *testing.T) {
+	audit := &fakeAudit{}
+	eng := New(fake.NewSimpleClientset(), "default", audit)
+
+	if err := eng.Save("db-credentials/password", []byte("hunter2"), "alice", ""); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	if err := eng.Rename("db-credentials/password", "db-credentials/db-password", "alice", "clearer name"); err != nil {
+		t.Fatalf("Rename: %v", err)
+	}
+	if _, err := eng.Read("db-credentials/password"); err == nil {
+		t.Fatalf("expected old key to no longer exist")
+	}
+	file, err := eng.Read("db-credentials/db-password")
+	if err != nil {
+		t.Fatalf("Read new key: %v", err)
+	}
+	if string(file.Content) != "hunter2" {
+		t.Fatalf("unexpected content after rename: %s", file.Content)
+	}
+
+	history, err := audit.All()
+	if err != nil {
+		t.Fatalf("All: %v", err)
+	}
+	if len(history) != 2 || history[1].Action != "rename" || history[1].Path != "db-credentials/db-password" || history[1].PreviousPath != "db-credentials/password" {
+		t.Fatalf("unexpected audit history: %+v", history)
+	}
+}
+
+func TestEngineRenameRejectsCrossSecret(t *testing.T) {
+	eng := New(fake.NewSimpleClientset(), "default", &fakeAudit{})
+	if err := eng.Save("secret-a/key", []byte("v"), "alice", ""); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	if err := eng.Rename("secret-a/key", "secret-b/key", "alice", ""); err == nil {
+		t.Fatalf("expected error renaming into a different secret")
+	}
+}
+
 func TestEngineSearch(t *testing.T) {
 	eng := New(fake.NewSimpleClientset(), "default", &fakeAudit{})
 	if err := eng.Save("db-credentials/password", []byte("hunter2-super-secret"), "alice", ""); err != nil {

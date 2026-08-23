@@ -78,6 +78,78 @@ func TestEngineSaveReadListDelete(t *testing.T) {
 	}
 }
 
+func TestEngineRename(t *testing.T) {
+	audit := &fakeAudit{}
+	eng, err := New(t.TempDir(), audit)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	if err := eng.Save("notes/old.md", []byte("hello"), "alice", ""); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	if err := eng.Rename("notes/old.md", "notes/new.md", "alice", "typo fix"); err != nil {
+		t.Fatalf("Rename: %v", err)
+	}
+	if _, err := eng.Read("notes/old.md"); err == nil {
+		t.Fatalf("expected old path to no longer exist")
+	}
+	file, err := eng.Read("notes/new.md")
+	if err != nil {
+		t.Fatalf("Read new path: %v", err)
+	}
+	if string(file.Content) != "hello" {
+		t.Fatalf("unexpected content after rename: %s", file.Content)
+	}
+
+	history, err := audit.All()
+	if err != nil {
+		t.Fatalf("All: %v", err)
+	}
+	if len(history) != 2 || history[1].Action != "rename" || history[1].Path != "notes/new.md" || history[1].PreviousPath != "notes/old.md" {
+		t.Fatalf("unexpected audit history: %+v", history)
+	}
+}
+
+func TestEngineRenameFailsIfSourceMissing(t *testing.T) {
+	eng, err := New(t.TempDir(), &fakeAudit{})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	if err := eng.Rename("notes/missing.md", "notes/new.md", "alice", ""); err == nil {
+		t.Fatalf("expected error renaming a nonexistent source")
+	}
+}
+
+func TestEngineRenameFailsIfTargetExists(t *testing.T) {
+	eng, err := New(t.TempDir(), &fakeAudit{})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	if err := eng.Save("notes/a.md", []byte("a"), "alice", ""); err != nil {
+		t.Fatalf("Save a: %v", err)
+	}
+	if err := eng.Save("notes/b.md", []byte("b"), "alice", ""); err != nil {
+		t.Fatalf("Save b: %v", err)
+	}
+	if err := eng.Rename("notes/a.md", "notes/b.md", "alice", ""); err == nil {
+		t.Fatalf("expected error renaming onto an existing note")
+	}
+}
+
+func TestEngineRenameRejectsDirectoryChange(t *testing.T) {
+	eng, err := New(t.TempDir(), &fakeAudit{})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	if err := eng.Save("a/note.md", []byte("hi"), "alice", ""); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	if err := eng.Rename("a/note.md", "b/note.md", "alice", ""); err == nil {
+		t.Fatalf("expected error renaming into a different directory")
+	}
+}
+
 func TestEngineCreateNamespace(t *testing.T) {
 	eng, err := New(t.TempDir(), &fakeAudit{})
 	if err != nil {

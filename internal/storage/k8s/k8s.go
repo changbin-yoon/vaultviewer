@@ -202,6 +202,47 @@ func (e *Engine) Delete(path string, user string) error {
 	})
 }
 
+func (e *Engine) Rename(oldPath, newPath, user, reason string) error {
+	oldSecret, oldKey := splitPath(oldPath)
+	newSecret, newKey := splitPath(newPath)
+	if oldKey == "" || newKey == "" {
+		return fmt.Errorf("rename requires paths that reference a key within a secret")
+	}
+	if oldSecret != newSecret {
+		return fmt.Errorf("rename must stay within the same secret (namespace 이동은 지원하지 않음): %q -> %q", oldPath, newPath)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), requestTimeout)
+	defer cancel()
+
+	secrets := e.client.CoreV1().Secrets(e.namespace)
+	secret, err := secrets.Get(ctx, oldSecret, metav1.GetOptions{})
+	if err != nil {
+		return fmt.Errorf("get secret %q: %w", oldSecret, err)
+	}
+	value, exists := secret.Data[oldKey]
+	if !exists {
+		return fmt.Errorf("key %q not found in secret %q", oldKey, oldSecret)
+	}
+	if _, exists := secret.Data[newKey]; exists {
+		return fmt.Errorf("key %q already exists in secret %q", newKey, oldSecret)
+	}
+	secret.Data[newKey] = value
+	delete(secret.Data, oldKey)
+	if _, err := secrets.Update(ctx, secret, metav1.UpdateOptions{}); err != nil {
+		return fmt.Errorf("update secret %q: %w", oldSecret, err)
+	}
+
+	return e.audit.Record(model.AuditLog{
+		Path:         newPath,
+		PreviousPath: oldPath,
+		Action:       "rename",
+		User:         user,
+		Reason:       reason,
+		Timestamp:    time.Now(),
+	})
+}
+
 func (e *Engine) GetHistory(path string) ([]model.AuditLog, error) {
 	return e.audit.History(path)
 }

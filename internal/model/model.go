@@ -59,8 +59,11 @@ type SearchResult struct {
 // AuditLog represents a single recorded modification event.
 type AuditLog struct {
 	Path      string    `json:"path"`
-	Action    string    `json:"action"` // create, update, delete
+	Action    string    `json:"action"` // create, update, delete, rename
 	User      string    `json:"user"`
 	Reason    string    `json:"reason,omitempty"`
 	Timestamp time.Time `json:"timestamp"`
+	// PreviousPath is set only for Action "rename", holding the path this
+	// note was renamed from.
+	PreviousPath string `json:"previousPath,omitempty"`
 }

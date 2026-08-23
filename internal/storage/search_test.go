@@ -131,6 +131,7 @@ func (f *fakeEngine) Save(path string, content []byte, user, reason string) erro
 func (f *fakeEngine) Delete(path string, user string) error                       { return nil }
 func (f *fakeEngine) GetHistory(path string) ([]model.AuditLog, error)            { return nil, nil }
 func (f *fakeEngine) CreateNamespace(path string, user string) error              { return nil }
+func (f *fakeEngine) Rename(oldPath, newPath, user, reason string) error          { return nil }
 func (f *fakeEngine) Search(query string) ([]model.SearchResult, error) {
 	return WalkAndSearch(f, query)
 }

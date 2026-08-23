@@ -13,10 +13,11 @@ export interface VaultFile {
 
 export interface AuditLog {
   path: string;
-  action: "create" | "update" | "delete";
+  action: "create" | "update" | "delete" | "rename";
   user: string;
   reason?: string;
   timestamp: string;
+  previousPath?: string;
 }
 
 export interface SearchResult {
@@ -115,6 +116,15 @@ export function readFile(path: string) {
 export function saveFile(path: string, content: string | Blob, reason: string) {
   const qs = new URLSearchParams({ path, reason });
   return request<void>(`/api/file?${qs}`, { method: "PUT", body: content });
+}
+
+// Renames a note within the same directory (from/to's parent path must
+// match — enforced server-side). Doesn't touch other notes' wikilinks —
+// callers that want those kept intact rewrite and re-save them separately
+// via saveFile, using markdown.ts's renameWikilinkReferences.
+export function renameFile(from: string, to: string, reason: string) {
+  const qs = new URLSearchParams({ from, to, reason });
+  return request<void>(`/api/rename?${qs}`, { method: "PUT" });
 }
 
 export function createNamespace(path: string) {

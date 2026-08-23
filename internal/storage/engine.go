@@ -13,6 +13,11 @@ type VaultStorageEngine interface {
 	Save(path string, content []byte, user, reason string) error // adm, dev
 	Delete(path string, user string) error                       // adm only
 	GetHistory(path string) ([]model.AuditLog, error)            // Git / Local History
+	// Rename moves a single note to a new path within the same directory
+	// (everything before the last path segment must match) — renaming
+	// into a different directory/namespace is out of scope. Fails if
+	// oldPath doesn't exist or newPath already does.
+	Rename(oldPath, newPath, user, reason string) error // adm, dev
 	// CreateNamespace creates an empty grouping node at path (a directory
 	// in local mode). Backends with no concept of an empty namespace (e.g.
 	// Kubernetes Secrets, where a namespace only exists once it holds a

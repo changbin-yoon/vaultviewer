@@ -174,6 +174,19 @@ func main() {
 		w.WriteHeader(http.StatusNoContent)
 	}))
 
+	mux.HandleFunc("/api/rename", auth.RequireWrite(sm, func(w http.ResponseWriter, r *http.Request, user model.User) {
+		if r.Method != http.MethodPut {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		from, to := r.URL.Query().Get("from"), r.URL.Query().Get("to")
+		if err := engine.Rename(from, to, user.Username, r.URL.Query().Get("reason")); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}))
+
 	mux.HandleFunc("/api/file", func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:

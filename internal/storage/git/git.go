@@ -111,7 +111,7 @@ func (e *Engine) Save(path string, content []byte, user, reason string) error {
 	if err := e.Engine.Save(path, content, user, reason); err != nil {
 		return err
 	}
-	e.commitChange(path, "save", user, reason)
+	e.commitChange([]string{path}, "save: "+path, user, reason)
 	return nil
 }
 
@@ -119,49 +119,64 @@ func (e *Engine) Delete(path string, user string) error {
 	if err := e.Engine.Delete(path, user); err != nil {
 		return err
 	}
-	e.commitChange(path, "delete", user, "")
+	e.commitChange([]string{path}, "delete: "+path, user, "")
 	return nil
 }
 
-// commitChange stages and commits only the single path this operation
-// touched (never a blanket "add everything", so an unrelated concurrent
-// write can't get swept into this commit). Best-effort: any git failure
-// is logged and swallowed, never returned to the caller — the underlying
+func (e *Engine) Rename(oldPath, newPath, user, reason string) error {
+	if err := e.Engine.Rename(oldPath, newPath, user, reason); err != nil {
+		return err
+	}
+	// Staging both the vanished old path and the new one in the same
+	// commit lets git recognize it as a rename (shows as "renamed:" in
+	// status, preserved across `git log --follow`) rather than an
+	// unrelated delete+add pair.
+	e.commitChange([]string{oldPath, newPath}, fmt.Sprintf("rename: %s -> %s", oldPath, newPath), user, reason)
+	return nil
+}
+
+// commitChange stages and commits only the paths this operation touched
+// (never a blanket "add everything", so an unrelated concurrent write
+// can't get swept into this commit). Best-effort: any git failure is
+// logged and swallowed, never returned to the caller — the underlying
 // file write (the real source of truth) already succeeded, matching how
 // internal/audit treats its own persistence failures.
-func (e *Engine) commitChange(path, action, user, reason string) {
+func (e *Engine) commitChange(paths []string, subject, user, reason string) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
-	if _, err := e.run("add", "-A", "--", path); err != nil {
-		log.Printf("git: failed to stage %q: %v", path, err)
+	args := append([]string{"add", "-A", "--"}, paths...)
+	if _, err := e.run(args...); err != nil {
+		log.Printf("git: failed to stage %v: %v", paths, err)
 		return
 	}
-	dirty, err := e.hasStagedDiff(path)
+	dirty, err := e.hasStagedDiff(paths)
 	if err != nil {
-		log.Printf("git: failed to check staged diff for %q: %v", path, err)
+		log.Printf("git: failed to check staged diff for %v: %v", paths, err)
 		return
 	}
 	if !dirty {
-		// Re-saving identical content, or deleting a path git never
-		// tracked (e.g. it only ever held now-ignored dotfiles) — nothing
-		// to commit, and that's not an error.
+		// Re-saving identical content, or deleting/renaming a path git
+		// never tracked (e.g. it only ever held now-ignored dotfiles) —
+		// nothing to commit, and that's not an error.
 		return
 	}
-	message := action + ": " + path
+	message := subject
 	if reason != "" {
 		message += "\n\nReason: " + reason
 	}
 	if err := e.commit(user, message); err != nil {
-		log.Printf("git: failed to commit %q: %v", path, err)
+		log.Printf("git: failed to commit %v: %v", paths, err)
 	}
 }
 
 // hasStagedDiff reports whether the index currently differs from HEAD for
-// path. `git diff --cached --quiet` exits 1 when there IS a difference and
-// 0 when there isn't — that exit code is the answer, not a failure.
-func (e *Engine) hasStagedDiff(path string) (bool, error) {
-	cmd := exec.Command("git", "-C", e.root, "diff", "--cached", "--quiet", "--", path)
+// any of paths. `git diff --cached --quiet` exits 1 when there IS a
+// difference and 0 when there isn't — that exit code is the answer, not a
+// failure.
+func (e *Engine) hasStagedDiff(paths []string) (bool, error) {
+	args := append([]string{"diff", "--cached", "--quiet", "--"}, paths...)
+	cmd := exec.Command("git", append([]string{"-C", e.root}, args...)...)
 	err := cmd.Run()
 	if err == nil {
 		return false, nil

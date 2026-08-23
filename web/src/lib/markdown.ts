@@ -43,7 +43,7 @@ export function stripMdExtension(nameOrPath: string): string {
 // with a capturing group).
 const CODE_SEGMENT = /(```[\s\S]*?```|`[^`\n]*`)/g;
 
-function mapOutsideCode(md: string, transform: (text: string) => string): string {
+export function mapOutsideCode(md: string, transform: (text: string) => string): string {
   return md
     .split(CODE_SEGMENT)
     .map((segment, i) => (i % 2 === 0 ? transform(segment) : segment))
@@ -124,4 +124,35 @@ export function resolveLinkTarget(target: string, currentDir: string, forEmbed: 
   if (clean.includes("/")) return withExt;
   if (forEmbed && !hasExt) return withExt; // rare: bare markdown embed name
   return currentDir ? `${currentDir}/${withExt}` : withExt;
+}
+
+// [[target]] / [[target|alias]] / ![[target#heading|alias]] — matches the
+// same raw-target grammar as extractWikilinkTargets/preprocessObsidian.
+const WIKILINK_TARGET = /(!?\[\[)([^\]|#]+)((?:#[^\]|]+)?(?:\|[^\]]+)?\]\])/g;
+
+// Rewrites every [[...]]/![[...]] reference to oldName in md so it points
+// at newName instead — used when renaming a note within the same
+// directory, to keep other notes' links from breaking. Only the raw
+// target's final path segment is compared/replaced (case-sensitive, exact
+// match, extension stripped) — any leading directory, #heading anchor,
+// |alias, and embed-vs-link form are left exactly as the user wrote them.
+// Runs outside code blocks/spans only (see mapOutsideCode) so literal
+// syntax examples in documentation notes are never rewritten.
+export function renameWikilinkReferences(md: string, oldName: string, newName: string): string {
+  return mapOutsideCode(md, (text) =>
+    text.replace(WIKILINK_TARGET, (whole, prefix, rawTarget, suffix) => {
+      const clean = (rawTarget as string).trim();
+      const hasExt = /\.[a-z0-9]+$/i.test(clean);
+      const dot = hasExt ? clean.lastIndexOf(".") : clean.length;
+      const stem = clean.slice(0, dot);
+      const ext = clean.slice(dot);
+      const slash = stem.lastIndexOf("/");
+      const dir = slash >= 0 ? stem.slice(0, slash + 1) : "";
+      const bareName = slash >= 0 ? stem.slice(slash + 1) : stem;
+      // A note is never an image — skip embeds pointing at attachments
+      // (e.g. ![[some.png]]) even if their stem happens to match oldName.
+      if (bareName !== oldName || isImageTarget(clean)) return whole;
+      return `${prefix}${dir}${newName}${ext}${suffix}`;
+    })
+  );
 }

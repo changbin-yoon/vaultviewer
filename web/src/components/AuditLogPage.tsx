@@ -8,6 +8,7 @@ const ACTION_CLASS: Record<string, string> = {
   create: "tag tag-neutral",
   update: "tag tag-accent",
   delete: "tag tag-neutral",
+  rename: "tag tag-accent",
 };
 
 const RECONNECT_MS = 3000;
@@ -113,7 +114,10 @@ export function AuditLogPage() {
                 <td>
                   <span className={ACTION_CLASS[e.action] ?? "tag tag-neutral"}>{e.action.toUpperCase()}</span>
                 </td>
-                <td className="mono">/{stripMdExtension(e.path)}</td>
+                <td className="mono">
+                  {e.previousPath && <span className="text-muted">{stripMdExtension(e.previousPath)} → </span>}
+                  /{stripMdExtension(e.path)}
+                </td>
                 <td className="text-muted">{e.reason || "—"}</td>
               </tr>
             ))}

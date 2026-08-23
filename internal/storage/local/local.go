@@ -133,6 +133,37 @@ func (e *Engine) Delete(path string, user string) error {
 	})
 }
 
+func (e *Engine) Rename(oldPath, newPath, user, reason string) error {
+	if filepath.Dir(oldPath) != filepath.Dir(newPath) {
+		return fmt.Errorf("rename must stay within the same directory: %q -> %q", oldPath, newPath)
+	}
+	oldFull, err := e.resolve(oldPath)
+	if err != nil {
+		return err
+	}
+	newFull, err := e.resolve(newPath)
+	if err != nil {
+		return err
+	}
+	if _, err := os.Stat(oldFull); err != nil {
+		return fmt.Errorf("stat %q: %w", oldPath, err)
+	}
+	if _, statErr := os.Stat(newFull); statErr == nil {
+		return fmt.Errorf("path %q already exists", newPath)
+	}
+	if err := os.Rename(oldFull, newFull); err != nil {
+		return err
+	}
+	return e.audit.Record(model.AuditLog{
+		Path:         newPath,
+		PreviousPath: oldPath,
+		Action:       "rename",
+		User:         user,
+		Reason:       reason,
+		Timestamp:    time.Now(),
+	})
+}
+
 func (e *Engine) GetHistory(path string) ([]model.AuditLog, error) {
 	return e.audit.History(path)
 }

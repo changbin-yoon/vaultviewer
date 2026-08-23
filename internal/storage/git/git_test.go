@@ -148,6 +148,32 @@ func TestDeleteCreatesACommit(t *testing.T) {
 	}
 }
 
+func TestRenameCreatesACommit(t *testing.T) {
+	eng, root := newTestEngine(t)
+	if err := eng.Save("old.md", []byte("hello"), "alice", ""); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	if err := eng.Rename("old.md", "new.md", "carol", "typo fix"); err != nil {
+		t.Fatalf("Rename: %v", err)
+	}
+
+	log := gitLog(t, root, "log", "--format=%an|%s")
+	if !strings.Contains(log, "carol|rename: old.md -> new.md") {
+		t.Errorf("expected a rename commit authored by carol, got:\n%s", log)
+	}
+	if _, err := os.Stat(filepath.Join(root, "old.md")); !os.IsNotExist(err) {
+		t.Errorf("expected old.md to no longer exist on disk, stat err = %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "new.md")); err != nil {
+		t.Errorf("expected new.md to exist on disk: %v", err)
+	}
+
+	status := gitLog(t, root, "status", "--porcelain=v1", "--", "old.md", "new.md")
+	if strings.TrimSpace(status) != "" {
+		t.Errorf("expected a clean working tree after the rename commit, got:\n%s", status)
+	}
+}
+
 func TestAuditDotfilesAreIgnoredByGit(t *testing.T) {
 	eng, root := newTestEngine(t)
 	if err := eng.Save("note.md", []byte("hello"), "alice", ""); err != nil {
