@@ -36,11 +36,11 @@ func NewSessionManager(secret []byte, ttl time.Duration) *SessionManager {
 	return &SessionManager{secret: secret, ttl: ttl}
 }
 
-// Issue creates a signed token encoding user's identity, role, and
-// expiration.
+// Issue creates a signed token encoding user's identity, role, department,
+// and expiration.
 func (sm *SessionManager) Issue(user model.User) (string, error) {
 	expires := time.Now().Add(sm.ttl).Unix()
-	payload := fmt.Sprintf("%s|%s|%d", user.Username, user.Role, expires)
+	payload := fmt.Sprintf("%s|%s|%s|%d", user.Username, user.Role, user.Department, expires)
 	encodedPayload := base64.RawURLEncoding.EncodeToString([]byte(payload))
 	sig := sm.sign(encodedPayload)
 	return encodedPayload + "." + sig, nil
@@ -64,12 +64,12 @@ func (sm *SessionManager) Verify(token string) (*model.User, error) {
 	if err != nil {
 		return nil, ErrInvalidSession
 	}
-	fields := strings.SplitN(string(rawPayload), "|", 3)
-	if len(fields) != 3 {
+	fields := strings.SplitN(string(rawPayload), "|", 4)
+	if len(fields) != 4 {
 		return nil, ErrInvalidSession
 	}
-	username, role := fields[0], model.Role(fields[1])
-	expires, err := strconv.ParseInt(fields[2], 10, 64)
+	username, role, department := fields[0], model.Role(fields[1]), fields[2]
+	expires, err := strconv.ParseInt(fields[3], 10, 64)
 	if err != nil {
 		return nil, ErrInvalidSession
 	}
@@ -77,7 +77,7 @@ func (sm *SessionManager) Verify(token string) (*model.User, error) {
 		return nil, ErrSessionExpired
 	}
 
-	return &model.User{Username: username, Role: role}, nil
+	return &model.User{Username: username, Role: role, Department: department}, nil
 }
 
 func (sm *SessionManager) sign(encodedPayload string) string {

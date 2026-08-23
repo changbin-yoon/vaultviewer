@@ -73,7 +73,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export async function login(username: string, password: string) {
-  return request<{ token: string; username: string; role: Role }>("/api/login", {
+  return request<{ token: string; username: string; role: Role; department: string }>("/api/login", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ username, password }),
@@ -81,7 +81,7 @@ export async function login(username: string, password: string) {
 }
 
 export function me() {
-  return request<{ username: string; role: Role }>("/api/me");
+  return request<{ username: string; role: Role; department: string }>("/api/me");
 }
 
 export function getConfig() {

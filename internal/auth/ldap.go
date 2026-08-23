@@ -71,7 +71,7 @@ func (a *LDAPAuthenticator) Authenticate(username, password string) (*model.User
 		return nil, fmt.Errorf("bind service account: %w", err)
 	}
 
-	userDN, err := a.lookupUserDN(search, username)
+	userDN, department, err := a.lookupUser(search, username)
 	if err != nil {
 		return nil, err
 	}
@@ -102,28 +102,32 @@ func (a *LDAPAuthenticator) Authenticate(username, password string) (*model.User
 		return nil, ErrNoRole
 	}
 
-	return &model.User{Username: username, Role: role}, nil
+	return &model.User{Username: username, Role: role, Department: department}, nil
 }
 
-func (a *LDAPAuthenticator) lookupUserDN(conn *goldap.Conn, username string) (string, error) {
+// lookupUser resolves username to its DN and its "o" (organizationName)
+// attribute, shown in the UI as the user's affiliation — a directory entry
+// with no "o" set just yields an empty department, not an error.
+func (a *LDAPAuthenticator) lookupUser(conn *goldap.Conn, username string) (dn, department string, err error) {
 	req := goldap.NewSearchRequest(
 		a.cfg.UserBaseDN(),
 		goldap.ScopeWholeSubtree, goldap.NeverDerefAliases, 2, 0, false,
 		fmt.Sprintf("(uid=%s)", goldap.EscapeFilter(username)),
-		[]string{"dn"},
+		[]string{"dn", "o"},
 		nil,
 	)
 	result, err := conn.Search(req)
 	if err != nil {
-		return "", fmt.Errorf("search user %q: %w", username, err)
+		return "", "", fmt.Errorf("search user %q: %w", username, err)
 	}
 	if len(result.Entries) == 0 {
-		return "", ErrInvalidCredentials
+		return "", "", ErrInvalidCredentials
 	}
 	if len(result.Entries) > 1 {
-		return "", fmt.Errorf("ambiguous user %q: %d entries found", username, len(result.Entries))
+		return "", "", fmt.Errorf("ambiguous user %q: %d entries found", username, len(result.Entries))
 	}
-	return result.Entries[0].DN, nil
+	entry := result.Entries[0]
+	return entry.DN, entry.GetAttributeValue("o"), nil
 }
 
 func (a *LDAPAuthenticator) lookupGroupCNs(conn *goldap.Conn, userDN string) ([]string, error) {

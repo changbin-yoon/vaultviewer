@@ -21,10 +21,19 @@ func (r Role) CanWrite() bool {
 	return r == RoleAdmin || r == RoleDev
 }
 
+// IsAdmin reports whether the role is permitted admin-only actions (viewing
+// the audit trail, changing settings).
+func (r Role) IsAdmin() bool {
+	return r == RoleAdmin
+}
+
 // User represents an authenticated LDAP user and their resolved role.
 type User struct {
 	Username string
 	Role     Role
+	// Department is the LDAP "o" (organizationName) attribute, shown in the
+	// UI as the user's affiliation. Empty if the directory entry doesn't set it.
+	Department string
 }
 
 // FileItem represents a single node (file or directory) in the vault tree.

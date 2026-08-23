@@ -352,9 +352,6 @@ export function MarkdownDocument({ path, onNavigate, onMutate }: Props) {
     }
   }
 
-  const writeHint = !canWrite(role) ? "view 역할은 수정할 수 없습니다" : "";
-  const deleteHint = !canDelete(role) ? "삭제는 adm 역할만 가능합니다" : "";
-
   return (
     <main className="p-6 grid" style={{ gridTemplateColumns: siblings.length > 1 ? "200px 1fr" : "1fr", gap: 28 }}>
       {siblings.length > 1 && (
@@ -378,11 +375,10 @@ export function MarkdownDocument({ path, onNavigate, onMutate }: Props) {
         <div className="flex items-start gap-3.5 mb-1">
           <h3>{stripMdExtension(name)}</h3>
           <div className="ml-auto flex gap-2">
-            {!editing && (
+            {!editing && canWrite(role) && (
               <button
                 className="btn btn-secondary"
-                disabled={!canWrite(role) || content == null}
-                title={writeHint}
+                disabled={content == null}
                 onClick={() => {
                   setDraft(content ?? "");
                   setReason("");
@@ -393,7 +389,7 @@ export function MarkdownDocument({ path, onNavigate, onMutate }: Props) {
                 편집
               </button>
             )}
-            {!editing && confirmingDelete && (
+            {!editing && canDelete(role) && confirmingDelete && (
               <div className="flex items-center gap-2">
                 <span className="text-sm" style={{ color: "#b3432f" }}>
                   {stripMdExtension(name)}을(를) 삭제할까요?
@@ -406,13 +402,8 @@ export function MarkdownDocument({ path, onNavigate, onMutate }: Props) {
                 </button>
               </div>
             )}
-            {!editing && !confirmingDelete && (
-              <button
-                className="btn btn-secondary"
-                disabled={!canDelete(role) || busy}
-                title={deleteHint}
-                onClick={() => setConfirmingDelete(true)}
-              >
+            {!editing && canDelete(role) && !confirmingDelete && (
+              <button className="btn btn-secondary" disabled={busy} onClick={() => setConfirmingDelete(true)}>
                 삭제
               </button>
             )}

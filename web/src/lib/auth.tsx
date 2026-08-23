@@ -5,6 +5,7 @@ import type { Role } from "./api";
 interface Session {
   username: string;
   role: Role;
+  department: string;
 }
 
 interface AuthState {
@@ -35,7 +36,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = async (username: string, password: string) => {
     const res = await api.login(username, password);
     api.setToken(res.token);
-    setSession({ username: res.username, role: res.role });
+    setSession({ username: res.username, role: res.role, department: res.department });
   };
 
   const logout = () => {

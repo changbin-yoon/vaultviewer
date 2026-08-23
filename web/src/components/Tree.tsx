@@ -149,15 +149,16 @@ export function Tree({
               {rootItems.filter((i) => !isHiddenFromTree(i)).length}
             </span>
           )}
-          <button
-            className="btn btn-ghost"
-            style={{ fontSize: 14, lineHeight: 1, padding: "0 4px" }}
-            disabled={!canWrite(role)}
-            title={canWrite(role) ? "새 네임스페이스" : "view 역할은 만들 수 없습니다"}
-            onClick={() => setCreatingNamespace((v) => !v)}
-          >
-            +
-          </button>
+          {canWrite(role) && (
+            <button
+              className="btn btn-ghost"
+              style={{ fontSize: 14, lineHeight: 1, padding: "0 4px" }}
+              title="새 네임스페이스"
+              onClick={() => setCreatingNamespace((v) => !v)}
+            >
+              +
+            </button>
+          )}
           {onCollapse && (
             <button
               className="btn btn-ghost"

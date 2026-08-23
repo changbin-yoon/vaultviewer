@@ -128,9 +128,10 @@ func main() {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]string{
-			"token":    token,
-			"username": user.Username,
-			"role":     string(user.Role),
+			"token":      token,
+			"username":   user.Username,
+			"role":       string(user.Role),
+			"department": user.Department,
 		})
 	})
 
@@ -214,7 +215,7 @@ func main() {
 		json.NewEncoder(w).Encode(history)
 	}))
 
-	mux.HandleFunc("/api/audit", auth.RequireAuth(sm, func(w http.ResponseWriter, r *http.Request, _ model.User) {
+	mux.HandleFunc("/api/audit", auth.RequireAdmin(sm, func(w http.ResponseWriter, r *http.Request, _ model.User) {
 		entries, err := recorder.All()
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -229,8 +230,9 @@ func main() {
 	mux.HandleFunc("/api/me", auth.RequireAuth(sm, func(w http.ResponseWriter, r *http.Request, user model.User) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]string{
-			"username": user.Username,
-			"role":     string(user.Role),
+			"username":   user.Username,
+			"role":       string(user.Role),
+			"department": user.Department,
 		})
 	}))
 
@@ -385,8 +387,13 @@ func wsCheckOrigin(r *http.Request) bool {
 // cannot set custom headers on a WebSocket handshake request.
 func auditWebSocketHandler(sm *auth.SessionManager, recorder *audit.MemoryRecorder) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if _, err := sm.Verify(r.URL.Query().Get("token")); err != nil {
+		user, err := sm.Verify(r.URL.Query().Get("token"))
+		if err != nil {
 			http.Error(w, "invalid or expired session", http.StatusUnauthorized)
+			return
+		}
+		if !user.Role.IsAdmin() {
+			http.Error(w, "role does not permit admin access", http.StatusForbidden)
 			return
 		}
 

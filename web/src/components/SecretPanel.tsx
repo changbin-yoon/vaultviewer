@@ -181,29 +181,20 @@ export function SecretPanel({
     );
   }
   if (state.kind === "browse") {
-    const writeHint = !canWrite(role) ? "view 역할은 수정할 수 없습니다" : "";
     return (
       <main className="p-8">
         <div className="flex items-start gap-3.5 mb-1">
           <div className="mono text-xs text-muted">/{state.groupPath}</div>
-          <div className="ml-auto flex gap-2">
-            <button
-              className="btn btn-secondary"
-              disabled={!canWrite(role)}
-              title={writeHint}
-              onClick={() => setCreatingNamespace((v) => !v)}
-            >
-              새 네임스페이스
-            </button>
-            <button
-              className="btn btn-secondary"
-              disabled={!canWrite(role)}
-              title={writeHint}
-              onClick={() => setCreatingNote((v) => !v)}
-            >
-              새 노트
-            </button>
-          </div>
+          {canWrite(role) && (
+            <div className="ml-auto flex gap-2">
+              <button className="btn btn-secondary" onClick={() => setCreatingNamespace((v) => !v)}>
+                새 네임스페이스
+              </button>
+              <button className="btn btn-secondary" onClick={() => setCreatingNote((v) => !v)}>
+                새 노트
+              </button>
+            </div>
+          )}
         </div>
         {creatingNamespace && (
           <div className="blueprint p-5 my-5">
@@ -416,8 +407,6 @@ export function SecretPanel({
   }
 
   const { groupPath, rows } = state;
-  const writeHint = !canWrite(role) ? "view 역할은 수정할 수 없습니다" : "";
-  const deleteHint = !canDelete(role) ? "삭제는 adm 역할만 가능합니다" : "";
 
   function startEdit() {
     setDrafts(Object.fromEntries(rows.map((r) => [r.path, r.content])));
@@ -480,22 +469,17 @@ export function SecretPanel({
       <div className="flex items-start gap-3.5 mb-1">
         <h3>{rows.length === 1 ? rows[0].name : groupPath.split("/").pop()}</h3>
         <div className="ml-auto flex gap-2">
-          {!editing && (
-            <button className="btn btn-secondary" disabled={!canWrite(role)} title={writeHint} onClick={startEdit}>
+          {!editing && canWrite(role) && (
+            <button className="btn btn-secondary" onClick={startEdit}>
               편집
             </button>
           )}
-          {!editing && (
-            <button
-              className="btn btn-secondary"
-              disabled={!canWrite(role)}
-              title={writeHint}
-              onClick={() => setAddingKey((v) => !v)}
-            >
+          {!editing && canWrite(role) && (
+            <button className="btn btn-secondary" onClick={() => setAddingKey((v) => !v)}>
               키 추가
             </button>
           )}
-          {!editing && confirmingDeleteGroup && (
+          {!editing && canDelete(role) && confirmingDeleteGroup && (
             <div className="flex items-center gap-2">
               <span className="text-sm" style={{ color: "#b3432f" }}>
                 /{groupPath} 아래 {rows.length}개 키를 모두 삭제할까요?
@@ -508,13 +492,8 @@ export function SecretPanel({
               </button>
             </div>
           )}
-          {!editing && !confirmingDeleteGroup && (
-            <button
-              className="btn btn-secondary"
-              disabled={!canDelete(role) || busy}
-              title={deleteHint}
-              onClick={() => setConfirmingDeleteGroup(true)}
-            >
+          {!editing && canDelete(role) && !confirmingDeleteGroup && (
+            <button className="btn btn-secondary" disabled={busy} onClick={() => setConfirmingDeleteGroup(true)}>
               삭제
             </button>
           )}

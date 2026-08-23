@@ -64,3 +64,15 @@ func RequireDelete(sm *SessionManager, next AuthenticatedHandler) http.HandlerFu
 		next(w, r, user)
 	})
 }
+
+// RequireAdmin wraps next so it also rejects non-admin callers, on top of
+// RequireAuth's checks. Used for admin-only views like the audit trail.
+func RequireAdmin(sm *SessionManager, next AuthenticatedHandler) http.HandlerFunc {
+	return RequireAuth(sm, func(w http.ResponseWriter, r *http.Request, user model.User) {
+		if !user.Role.IsAdmin() {
+			http.Error(w, "role does not permit admin access", http.StatusForbidden)
+			return
+		}
+		next(w, r, user)
+	})
+}
