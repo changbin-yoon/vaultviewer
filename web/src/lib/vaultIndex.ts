@@ -184,7 +184,11 @@ async function buildVaultIndex(): Promise<VaultIndex> {
     }
 
     const linkedFromThisNote = new Set<string>();
-    for (const target of extractWikilinkTargets(contents[i])) {
+    // Scan only the body — scanning the full raw content would also match
+    // [[wikilinks]] written inside a frontmatter relation field (e.g.
+    // "depends_on:"), double-counting each as a second, untyped edge to
+    // the same target the relation loop below already adds.
+    for (const target of extractWikilinkTargets(body)) {
       const resolved = resolveLinkTarget(target, dir, false);
       if (!known.has(resolved) && !nodes.has(resolved)) {
         nodes.set(resolved, { id: resolved, name: target.split("/").pop() ?? target, resolved: false, type: null });
