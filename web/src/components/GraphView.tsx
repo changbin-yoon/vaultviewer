@@ -15,6 +15,7 @@ interface SimNode extends SimulationNodeDatum {
 interface SimEdge {
   source: SimNode;
   target: SimNode;
+  relation?: string;
 }
 
 const WIDTH = 1000;
@@ -30,7 +31,7 @@ function layout(data: VaultIndex): { nodes: SimNode[]; edges: SimEdge[] } {
   const byId = new Map(nodes.map((n) => [n.id, n]));
   const edges = data.edges
     .filter((e) => byId.has(e.source) && byId.has(e.target))
-    .map((e) => ({ source: byId.get(e.source)!, target: byId.get(e.target)! }));
+    .map((e) => ({ source: byId.get(e.source)!, target: byId.get(e.target)!, relation: e.relation }));
 
   const sim = forceSimulation(nodes)
     .force("charge", forceManyBody().strength(-140))
@@ -62,6 +63,11 @@ export function GraphView({ onNavigate }: { onNavigate: (path: string) => void }
     () => Array.from(new Set(nodes.filter((n) => n.resolved && n.type).map((n) => n.type as string))).sort(),
     [nodes]
   );
+  const relationTypes = useMemo(
+    () => Array.from(new Set(edges.filter((e) => e.relation).map((e) => e.relation as string))).sort(),
+    [edges]
+  );
+  const relationMarkerId = (relation: string) => `arrow-${relationTypes.indexOf(relation)}`;
   const neighbors = useMemo(() => {
     const m = new Map<string, Set<string>>();
     for (const e of edges) {
@@ -144,6 +150,51 @@ export function GraphView({ onNavigate }: { onNavigate: (path: string) => void }
                 ✕
               </button>
             </div>
+            {(() => {
+              const incoming = edges.filter((e) => e.relation && e.target.id === selected.id);
+              const outgoing = edges.filter((e) => e.relation && e.source.id === selected.id);
+              if (incoming.length === 0 && outgoing.length === 0) return null;
+              return (
+                <div className="flex flex-col gap-2 pt-2 border-t border-[var(--color-divider)]">
+                  {incoming.length > 0 && (
+                    <div>
+                      <div className="text-muted mb-1">영향을 받는 것</div>
+                      <div className="flex flex-col gap-1">
+                        {incoming.map((e, i) => (
+                          <button
+                            key={i}
+                            className="wikilink text-left"
+                            style={{ fontSize: 11 }}
+                            onClick={() => setSelected(e.source)}
+                          >
+                            {e.source.name.replace(/\.md$/, "")}
+                            <span className="text-muted"> ({e.relation})</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {outgoing.length > 0 && (
+                    <div>
+                      <div className="text-muted mb-1">이것이 의존하는 것</div>
+                      <div className="flex flex-col gap-1">
+                        {outgoing.map((e, i) => (
+                          <button
+                            key={i}
+                            className="wikilink text-left"
+                            style={{ fontSize: 11 }}
+                            onClick={() => setSelected(e.target)}
+                          >
+                            {e.target.name.replace(/\.md$/, "")}
+                            <span className="text-muted"> ({e.relation})</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
           </div>
         )}
         {types.length > 0 && (
@@ -168,6 +219,20 @@ export function GraphView({ onNavigate }: { onNavigate: (path: string) => void }
             ))}
           </div>
         )}
+        {relationTypes.length > 0 && (
+          <div
+            className="flex flex-col gap-1.5 p-3 text-xs"
+            style={{ background: "var(--color-bg)", border: "1px solid var(--color-divider)" }}
+          >
+            <div className="text-muted" style={{ fontSize: 10 }}>관계 타입</div>
+            {relationTypes.map((relation) => (
+              <div key={relation} className="flex items-center gap-2">
+                <span style={{ width: 14, height: 2, background: colorForType(relation), display: "inline-block", flexShrink: 0 }} />
+                <span>{relation}</span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
       <svg
         viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
@@ -180,6 +245,22 @@ export function GraphView({ onNavigate }: { onNavigate: (path: string) => void }
         onPointerLeave={onPointerUp}
         onClick={() => setSelected(null)}
       >
+        <defs>
+          {relationTypes.map((relation) => (
+            <marker
+              key={relation}
+              id={relationMarkerId(relation)}
+              viewBox="0 0 10 10"
+              refX={9}
+              refY={5}
+              markerWidth={6}
+              markerHeight={6}
+              orient="auto-start-reverse"
+            >
+              <path d="M 0 0 L 10 5 L 0 10 z" fill={colorForType(relation)} />
+            </marker>
+          ))}
+        </defs>
         <g transform={`translate(${view.x} ${view.y}) scale(${view.scale})`}>
           {edges.map((e, i) => {
             const dim = hovered && !neighbors.get(hovered)?.has(e.source.id === hovered ? e.target.id : e.source.id);
@@ -190,10 +271,13 @@ export function GraphView({ onNavigate }: { onNavigate: (path: string) => void }
                 y1={e.source.y}
                 x2={e.target.x}
                 y2={e.target.y}
-                stroke="var(--color-divider)"
-                strokeWidth={1}
-                opacity={dim ? 0.15 : 0.7}
-              />
+                stroke={e.relation ? colorForType(e.relation) : "var(--color-divider)"}
+                strokeWidth={e.relation ? 1.5 : 1}
+                opacity={dim ? 0.15 : e.relation ? 0.85 : 0.7}
+                markerEnd={e.relation ? `url(#${relationMarkerId(e.relation)})` : undefined}
+              >
+                {e.relation && <title>{e.relation}</title>}
+              </line>
             );
           })}
           {nodes.map((n) => {

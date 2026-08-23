@@ -11,6 +11,10 @@ export interface GraphNode {
 export interface GraphEdge {
   source: string;
   target: string;
+  // Set when this edge came from a typed frontmatter relation field (e.g.
+  // "depends_on:") rather than a plain [[wikilink]] in the note body — the
+  // field name itself, free-form vocabulary like frontmatter "type:".
+  relation?: string;
 }
 
 export interface VaultIndex {
@@ -58,6 +62,52 @@ function extractFrontmatterType(frontmatter: string): string | null {
   if (!m) return null;
   const value = m[1].trim().replace(/^["']|["']$/g, "");
   return value || null;
+}
+
+const RESERVED_FRONTMATTER_KEYS = new Set(["title", "type", "tags"]);
+const WIKILINK_IN_VALUE = /\[\[([^\]|#]+)/;
+
+// Any frontmatter field besides title/type/tags whose value contains one
+// or more [[wikilinks]] is treated as a typed relationship to those notes
+// — the field name is the relation's label (e.g. "depends_on",
+// "queried_by"), freely chosen by whoever writes the note, the same
+// "free-form vocabulary, not a fixed enum" philosophy as "type:" itself.
+// Handles the same three YAML shapes extractFrontmatterTags does: a flow
+// list ("field: [[[a]], [[b]]]"), a scalar ("field: [[a]]"), or a block
+// list ("field:\n  - [[a]]\n  - [[b]]").
+function extractFrontmatterRelations(frontmatter: string): { relation: string; targets: string[] }[] {
+  const lines = frontmatter.split(/\r?\n/);
+  const out: { relation: string; targets: string[] }[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    const m = /^([A-Za-z][\w-]*):\s*(.*)$/.exec(lines[i]);
+    if (!m) continue;
+    const key = m[1];
+    if (RESERVED_FRONTMATTER_KEYS.has(key.toLowerCase())) continue;
+
+    const inline = m[2].trim();
+    let values: string[];
+    if (inline.startsWith("[")) {
+      values = inline
+        .replace(/^\[|\]$/g, "")
+        .split(",")
+        .map((v) => v.trim());
+    } else if (inline) {
+      values = [inline];
+    } else {
+      values = [];
+      for (let j = i + 1; j < lines.length; j++) {
+        const bm = /^\s*-\s*(.+)$/.exec(lines[j]);
+        if (!bm) break;
+        values.push(bm[1].trim());
+      }
+    }
+
+    const targets = values
+      .map((v) => WIKILINK_IN_VALUE.exec(v)?.[1]?.trim())
+      .filter((v): v is string => !!v);
+    if (targets.length > 0) out.push({ relation: key, targets });
+  }
+  return out;
 }
 
 // Inline #tag references in the note body (Obsidian tag syntax): a '#'
@@ -147,6 +197,20 @@ async function buildVaultIndex(): Promise<VaultIndex> {
       edges.push({ source: path, target: resolved });
       if (!backlinks.has(resolved)) backlinks.set(resolved, []);
       backlinks.get(resolved)!.push(path);
+    }
+
+    if (frontmatter) {
+      for (const { relation, targets } of extractFrontmatterRelations(frontmatter)) {
+        for (const target of targets) {
+          const resolved = resolveLinkTarget(target, dir, false);
+          if (!known.has(resolved) && !nodes.has(resolved)) {
+            nodes.set(resolved, { id: resolved, name: target.split("/").pop() ?? target, resolved: false, type: null });
+          }
+          edges.push({ source: path, target: resolved, relation });
+          if (!backlinks.has(resolved)) backlinks.set(resolved, []);
+          if (!backlinks.get(resolved)!.includes(path)) backlinks.get(resolved)!.push(path);
+        }
+      }
     }
   });
 
