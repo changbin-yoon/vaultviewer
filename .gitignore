@@ -1,3 +1,9 @@
+# Personal/PII vault content — never version control (removed from git
+# history 2026-08-23 after being committed by mistake).
+vault/01-인수인계/
+vault/07-경력-이력서/
+vault/_원본백업/
+
 # Kubeconfigs contain live cluster credentials.
 *.kubeconfig
 
