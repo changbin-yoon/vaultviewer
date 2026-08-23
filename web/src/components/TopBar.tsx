@@ -28,12 +28,12 @@ export function TopBar({
       <nav className="flex gap-1 text-sm">
         {(
           [
-            ["vault", "볼트"],
+            ["vault", "문서"],
             ["graph", "그래프"],
+            ["guide", "작성가이드"],
             ["tags", "태그"],
             ["search", "검색"],
             ["audit", "감사 로그"],
-            ["guide", "자료"],
             ["settings", "설정"],
           ] as const
         ).map(([key, label]) => (
