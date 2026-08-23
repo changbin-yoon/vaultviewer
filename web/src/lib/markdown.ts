@@ -35,28 +35,52 @@ export function stripMdExtension(nameOrPath: string): string {
   return nameOrPath.replace(/\.md$/i, "");
 }
 
+// Fenced code blocks (```...```) and inline code spans (`...`) are shown
+// verbatim — text inside them documenting wikilink/embed/callout syntax
+// (as this very file's own examples do) must never be rewritten as if it
+// were a real link. Every raw-markdown scan below splits on this first and
+// only touches the non-code segments (the even indices of String#split
+// with a capturing group).
+const CODE_SEGMENT = /(```[\s\S]*?```|`[^`\n]*`)/g;
+
+function mapOutsideCode(md: string, transform: (text: string) => string): string {
+  return md
+    .split(CODE_SEGMENT)
+    .map((segment, i) => (i % 2 === 0 ? transform(segment) : segment))
+    .join("");
+}
+
+function stripCode(md: string): string {
+  return md
+    .split(CODE_SEGMENT)
+    .filter((_, i) => i % 2 === 0)
+    .join("");
+}
+
 // [[target]] / [[target|Alias]] / [[target#heading|Alias]] -> a real
 // markdown link the custom `a` renderer intercepts by its "wikilink:" and
 // "embed:" pseudo-schemes, since remark otherwise leaves "[[...]]" as
 // literal text.
 export function preprocessObsidian(md: string): string {
-  let out = preprocessCallouts(md);
+  return mapOutsideCode(md, (text) => {
+    let out = preprocessCallouts(text);
 
-  // Embeds: ![[file]] or ![[file|alt]]
-  out = out.replace(/!\[\[([^\]|#]+)(#[^\]|]+)?(\|([^\]]+))?\]\]/g, (_m, target, _anchor, _p, alias) => {
-    const t = (target as string).trim();
-    const label = (alias as string | undefined)?.trim() || t;
-    return `![${label}](embed:${encodeURIComponent(t)})`;
+    // Embeds: ![[file]] or ![[file|alt]]
+    out = out.replace(/!\[\[([^\]|#]+)(#[^\]|]+)?(\|([^\]]+))?\]\]/g, (_m, target, _anchor, _p, alias) => {
+      const t = (target as string).trim();
+      const label = (alias as string | undefined)?.trim() || t;
+      return `![${label}](embed:${encodeURIComponent(t)})`;
+    });
+
+    // Wikilinks: [[file]] or [[file|alias]]
+    out = out.replace(/\[\[([^\]|#]+)(#[^\]|]+)?(\|([^\]]+))?\]\]/g, (_m, target, _anchor, _p, alias) => {
+      const t = (target as string).trim();
+      const label = (alias as string | undefined)?.trim() || t;
+      return `[${label}](wikilink:${encodeURIComponent(t)})`;
+    });
+
+    return out;
   });
-
-  // Wikilinks: [[file]] or [[file|alias]]
-  out = out.replace(/\[\[([^\]|#]+)(#[^\]|]+)?(\|([^\]]+))?\]\]/g, (_m, target, _anchor, _p, alias) => {
-    const t = (target as string).trim();
-    const label = (alias as string | undefined)?.trim() || t;
-    return `[${label}](wikilink:${encodeURIComponent(t)})`;
-  });
-
-  return out;
 }
 
 // Rewrites "> [!type] Title" callout headers into a sentinel paragraph
@@ -79,8 +103,9 @@ export function isImageTarget(target: string): boolean {
 export function extractWikilinkTargets(raw: string): string[] {
   const targets: string[] = [];
   const re = /!?\[\[([^\]|#]+)(#[^\]|]+)?(\|[^\]]+)?\]\]/g;
+  const text = stripCode(raw);
   let m: RegExpExecArray | null;
-  while ((m = re.exec(raw))) {
+  while ((m = re.exec(text))) {
     const target = m[1].trim();
     if (!isImageTarget(target)) targets.push(target);
   }

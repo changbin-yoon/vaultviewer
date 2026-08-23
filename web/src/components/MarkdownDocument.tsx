@@ -177,6 +177,7 @@ export function MarkdownDocument({ path, onNavigate }: Props) {
   const [draft, setDraft] = useState("");
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [backlinks, setBacklinks] = useState<string[] | null>(null);
   const [uploading, setUploading] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -187,6 +188,7 @@ export function MarkdownDocument({ path, onNavigate }: Props) {
 
   useEffect(() => {
     setEditing(false);
+    setConfirmingDelete(false);
     setError(null);
     setContent(null);
     api
@@ -268,7 +270,7 @@ export function MarkdownDocument({ path, onNavigate }: Props) {
   }
 
   async function remove() {
-    if (!confirm(`${stripMdExtension(name)}을(를) 삭제할까요?`)) return;
+    setConfirmingDelete(false);
     setBusy(true);
     try {
       await api.deleteFile(path);
@@ -323,8 +325,26 @@ export function MarkdownDocument({ path, onNavigate }: Props) {
                 편집
               </button>
             )}
-            {!editing && (
-              <button className="btn btn-secondary" disabled={!canDelete(role) || busy} title={deleteHint} onClick={remove}>
+            {!editing && confirmingDelete && (
+              <div className="flex items-center gap-2">
+                <span className="text-sm" style={{ color: "#b3432f" }}>
+                  {stripMdExtension(name)}을(를) 삭제할까요?
+                </span>
+                <button className="btn btn-secondary" disabled={busy} onClick={remove}>
+                  삭제 확인
+                </button>
+                <button className="btn btn-secondary" disabled={busy} onClick={() => setConfirmingDelete(false)}>
+                  취소
+                </button>
+              </div>
+            )}
+            {!editing && !confirmingDelete && (
+              <button
+                className="btn btn-secondary"
+                disabled={!canDelete(role) || busy}
+                title={deleteHint}
+                onClick={() => setConfirmingDelete(true)}
+              >
                 삭제
               </button>
             )}

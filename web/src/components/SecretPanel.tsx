@@ -48,6 +48,7 @@ export function SecretPanel({ selectedPath, onNavigate }: { selectedPath: string
   const [newNamespaceName, setNewNamespaceName] = useState("");
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [confirmingDeleteGroup, setConfirmingDeleteGroup] = useState(false);
 
   useEffect(() => {
     setEditing(false);
@@ -58,6 +59,7 @@ export function SecretPanel({ selectedPath, onNavigate }: { selectedPath: string
     setNewNamespaceName("");
     setActionError(null);
     setRevealed(false);
+    setConfirmingDeleteGroup(false);
     if (selectedPath == null || selectedPath.endsWith(".md")) return;
     void load(selectedPath);
   }, [selectedPath]);
@@ -396,7 +398,7 @@ export function SecretPanel({ selectedPath, onNavigate }: { selectedPath: string
   }
 
   async function deleteGroup() {
-    if (!confirm(`/${groupPath} 아래 ${rows.length}개 키를 모두 삭제할까요?`)) return;
+    setConfirmingDeleteGroup(false);
     setBusy(true);
     setActionError(null);
     try {
@@ -429,8 +431,26 @@ export function SecretPanel({ selectedPath, onNavigate }: { selectedPath: string
               키 추가
             </button>
           )}
-          {!editing && (
-            <button className="btn btn-secondary" disabled={!canDelete(role) || busy} title={deleteHint} onClick={deleteGroup}>
+          {!editing && confirmingDeleteGroup && (
+            <div className="flex items-center gap-2">
+              <span className="text-sm" style={{ color: "#b3432f" }}>
+                /{groupPath} 아래 {rows.length}개 키를 모두 삭제할까요?
+              </span>
+              <button className="btn btn-secondary" disabled={busy} onClick={deleteGroup}>
+                삭제 확인
+              </button>
+              <button className="btn btn-secondary" disabled={busy} onClick={() => setConfirmingDeleteGroup(false)}>
+                취소
+              </button>
+            </div>
+          )}
+          {!editing && !confirmingDeleteGroup && (
+            <button
+              className="btn btn-secondary"
+              disabled={!canDelete(role) || busy}
+              title={deleteHint}
+              onClick={() => setConfirmingDeleteGroup(true)}
+            >
               삭제
             </button>
           )}
