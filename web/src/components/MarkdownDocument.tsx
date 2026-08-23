@@ -254,13 +254,26 @@ export function MarkdownDocument({ path, onNavigate, onMutate }: Props) {
       const embed = `![[${storedName}]]`;
       const el = textareaRef.current;
       if (el) {
-        const start = el.selectionStart ?? draft.length;
-        const end = el.selectionEnd ?? draft.length;
-        const next = draft.slice(0, start) + embed + draft.slice(end);
+        let start = el.selectionStart ?? draft.length;
+        let end = el.selectionEnd ?? draft.length;
+        // A textarea the user never clicked into reports selectionStart/End
+        // as 0 — indistinguishable from a deliberate cursor at the very
+        // start, but for a non-empty draft "hasn't touched the textarea
+        // yet" is by far the more likely case. Inserting there would land
+        // the embed before the frontmatter's opening "---", breaking it.
+        // Append at the end instead.
+        if (start === 0 && end === 0 && draft.length > 0) {
+          start = end = draft.length;
+        }
+        // Appending straight onto the end of the last line (no separating
+        // newline) would glue the embed onto whatever text precedes it.
+        const needsLeadingNewline = start === draft.length && draft.length > 0 && !draft.endsWith("\n");
+        const insertion = needsLeadingNewline ? `\n${embed}` : embed;
+        const next = draft.slice(0, start) + insertion + draft.slice(end);
         setDraft(next);
         requestAnimationFrame(() => {
           el.focus();
-          el.selectionStart = el.selectionEnd = start + embed.length;
+          el.selectionStart = el.selectionEnd = start + insertion.length;
         });
       } else {
         setDraft((d) => d + embed);

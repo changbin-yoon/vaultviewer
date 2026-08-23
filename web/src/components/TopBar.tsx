@@ -19,7 +19,7 @@ export function TopBar({
   if (!session) return null;
 
   return (
-    <div className="flex items-center gap-4.5 px-5.5 py-3 border-b border-[var(--color-divider)]">
+    <div className="flex items-center gap-4.5 px-5.5 py-3 border-b border-[var(--color-divider)] overflow-x-auto whitespace-nowrap">
       <div className="font-[var(--font-heading)] font-semibold text-[19px] tracking-[.02em]">
         VAULT<span className="text-[var(--color-accent)]">VIEWER</span>
       </div>
