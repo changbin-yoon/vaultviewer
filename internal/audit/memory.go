@@ -1,31 +1,109 @@
 // Package audit records and serves modification history for storage
-// backends. MemoryRecorder is a process-local implementation used to boot
-// the server before persistent storage and WebSocket streaming are added.
+// backends. MemoryRecorder is a process-local implementation, optionally
+// backed by a file for durability across restarts.
 package audit
 
 import (
+	"bufio"
+	"encoding/json"
+	"fmt"
+	"log"
+	"os"
 	"sync"
 
 	"github.com/vaultviewer/vaultviewer/internal/model"
 	"github.com/vaultviewer/vaultviewer/internal/storage"
 )
 
-// MemoryRecorder implements storage.AuditRecorder in process memory. It
-// does not persist across restarts.
+// MemoryRecorder implements storage.AuditRecorder, holding every entry in
+// memory for fast reads (History/All always serve from there). Constructed
+// via NewMemoryRecorder, it's purely in-memory — history is lost on
+// restart. Constructed via NewMemoryRecorderWithFile, it also appends each
+// entry to a JSON-Lines file and reloads from it on startup, so history
+// survives a restart.
 type MemoryRecorder struct {
 	mu          sync.RWMutex
 	entries     []model.AuditLog
 	subscribers map[chan model.AuditLog]struct{}
+	file        *os.File // nil unless persistence is enabled
 }
 
 var _ storage.AuditRecorder = (*MemoryRecorder)(nil)
 
+// NewMemoryRecorder creates an in-memory-only recorder.
 func NewMemoryRecorder() *MemoryRecorder {
 	return &MemoryRecorder{subscribers: make(map[chan model.AuditLog]struct{})}
 }
 
+// NewMemoryRecorderWithFile creates a MemoryRecorder backed by a
+// JSON-Lines file at path: existing entries are loaded from it (if it
+// exists) before returning, and every future Record() is appended to it.
+// Intended for local mode, which already has a persistent volume to put
+// this on — cluster mode has no equivalent persistent location and uses
+// NewMemoryRecorder instead.
+func NewMemoryRecorderWithFile(path string) (*MemoryRecorder, error) {
+	entries, err := loadEntries(path)
+	if err != nil {
+		return nil, fmt.Errorf("load audit log %q: %w", path, err)
+	}
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o640)
+	if err != nil {
+		return nil, fmt.Errorf("open audit log %q: %w", path, err)
+	}
+	return &MemoryRecorder{
+		entries:     entries,
+		subscribers: make(map[chan model.AuditLog]struct{}),
+		file:        f,
+	}, nil
+}
+
+func loadEntries(path string) ([]model.AuditLog, error) {
+	f, err := os.Open(path)
+	if os.IsNotExist(err) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	var entries []model.AuditLog
+	scanner := bufio.NewScanner(f)
+	// Audit reasons can be long; raise the scanner's line-buffer ceiling
+	// well past anything a UI text field would realistically produce.
+	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	for scanner.Scan() {
+		line := scanner.Bytes()
+		if len(line) == 0 {
+			continue
+		}
+		var entry model.AuditLog
+		if err := json.Unmarshal(line, &entry); err != nil {
+			// One corrupt line (e.g. a truncated write from an unclean
+			// shutdown) shouldn't take down the whole history.
+			log.Printf("audit: skipping corrupt log line: %v", err)
+			continue
+		}
+		entries = append(entries, entry)
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
+	return entries, nil
+}
+
 func (r *MemoryRecorder) Record(entry model.AuditLog) error {
 	r.mu.Lock()
+	if r.file != nil {
+		if err := r.appendToFile(entry); err != nil {
+			// A disk hiccup persisting the audit trail must never fail (or
+			// even just look like it failed) the create/update/delete
+			// it's describing — that already succeeded against the real
+			// storage. Best-effort: log and keep going with the in-memory
+			// copy, which still serves reads and the WebSocket stream.
+			log.Printf("audit: failed to persist entry to disk: %v", err)
+		}
+	}
 	r.entries = append(r.entries, entry)
 	subs := make([]chan model.AuditLog, 0, len(r.subscribers))
 	for ch := range r.subscribers {
@@ -44,6 +122,22 @@ func (r *MemoryRecorder) Record(entry model.AuditLog) error {
 		}
 	}
 	return nil
+}
+
+// appendToFile must be called with r.mu held.
+func (r *MemoryRecorder) appendToFile(entry model.AuditLog) error {
+	line, err := json.Marshal(entry)
+	if err != nil {
+		return err
+	}
+	if _, err := r.file.Write(append(line, '\n')); err != nil {
+		return err
+	}
+	// Sync rather than relying on the OS's write-back cache: this log
+	// exists specifically to survive a restart, so minimize the window
+	// where a written entry only exists in a buffer an unclean pod kill
+	// could lose.
+	return r.file.Sync()
 }
 
 // Subscribe registers a listener for every future Record call, returning a

@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
@@ -29,9 +30,13 @@ import (
 )
 
 func main() {
-	recorder := audit.NewMemoryRecorder()
-
 	mode := strings.ToLower(envOr("VAULTVIEWER_MODE", "local"))
+
+	recorder, err := buildAuditRecorder(mode)
+	if err != nil {
+		log.Fatalf("init audit recorder: %v", err)
+	}
+
 	engine, configInfo, err := buildEngine(mode, recorder)
 	if err != nil {
 		log.Fatalf("init storage engine: %v", err)
@@ -272,6 +277,26 @@ func main() {
 	if err := srv.Shutdown(ctx); err != nil {
 		log.Printf("graceful shutdown timed out: %v", err)
 	}
+}
+
+// buildAuditRecorder chooses where the audit trail lives. Local mode
+// already has a persistent volume (the same one holding the vault
+// content) to put a durable log on, so history survives a restart there.
+// Cluster mode has no equivalent persistent location without adding a new
+// dependency, so it keeps the audit trail in memory only, as before —
+// history there resets on every restart.
+func buildAuditRecorder(mode string) (*audit.MemoryRecorder, error) {
+	if mode != "local" {
+		return audit.NewMemoryRecorder(), nil
+	}
+	root := envOr("VAULT_LOCAL_ROOT", "/data")
+	path := filepath.Join(root, ".vaultviewer-audit.jsonl")
+	recorder, err := audit.NewMemoryRecorderWithFile(path)
+	if err != nil {
+		return nil, err
+	}
+	log.Printf("audit log persisted to %s", path)
+	return recorder, nil
 }
 
 // buildEngine constructs the storage backend selected by VAULTVIEWER_MODE:
