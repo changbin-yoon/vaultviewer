@@ -10,6 +10,7 @@ LDAP 기반 RBAC를 지원하는 웹 시크릿/볼트 뷰어. 로컬 파일(마�
   Mermaid), 그래프 뷰, 태그
 - **배포**: Helm 차트 (`charts/vaultviewer/`) — 설치 방법과 값 설명은 해당 디렉토리의
   [README](charts/vaultviewer/README.md) 참고
+- **변경 이력**: [`CHANGELOG.md`](CHANGELOG.md) 참고
 
 ## 로컬 개발
 
