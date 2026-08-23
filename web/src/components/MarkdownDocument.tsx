@@ -98,9 +98,14 @@ function EmbedImage({ target, currentDir, alt }: { target: string; currentDir: s
 
   useEffect(() => {
     let cancelled = false;
+    // Every image the app itself lets you insert (the "이미지 추가" upload
+    // button) lands in attachments/, so try that path first — it's the
+    // path that actually resolves for the common case. resolveLinkTarget's
+    // currentDir-relative guess is the fallback, for images placed by hand
+    // (e.g. edited outside the app) that aren't in attachments/.
     const candidates = [
-      resolveLinkTarget(target, currentDir, true),
       `attachments/${decodeURIComponent(target)}`,
+      resolveLinkTarget(target, currentDir, true),
     ];
     (async () => {
       for (const path of candidates) {
@@ -167,6 +172,41 @@ function Link({
   );
 }
 
+function RenderedBody({
+  text,
+  currentDir,
+  onNavigate,
+}: {
+  text: string;
+  currentDir: string;
+  onNavigate: (path: string) => void;
+}) {
+  const { frontmatter, body } = splitFrontmatter(text);
+  return (
+    <article className="md-body">
+      {frontmatter && <pre className="md-frontmatter mono">{frontmatter}</pre>}
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        urlTransform={urlTransform}
+        components={{
+          blockquote: Blockquote,
+          a: (p) => <Link href={p.href} currentDir={currentDir} onNavigate={onNavigate}>{p.children}</Link>,
+          img: (p) => <MarkdownImage src={p.src ?? ""} alt={p.alt ?? ""} currentDir={currentDir} />,
+          code: (p) => {
+            const lang = /language-(\w+)/.exec(p.className ?? "")?.[1];
+            if (lang === "mermaid") {
+              return <MermaidDiagram code={childText(p.children)} />;
+            }
+            return <code className={p.className}>{p.children}</code>;
+          },
+        }}
+      >
+        {preprocessObsidian(body)}
+      </ReactMarkdown>
+    </article>
+  );
+}
+
 interface Props {
   path: string;
   onNavigate: (path: string) => void;
@@ -185,6 +225,7 @@ export function MarkdownDocument({ path, onNavigate, onMutate }: Props) {
   const latest = history.length > 0 ? history[history.length - 1] : null;
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
+  const [previewing, setPreviewing] = useState(false);
   const [draft, setDraft] = useState("");
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
@@ -199,6 +240,7 @@ export function MarkdownDocument({ path, onNavigate, onMutate }: Props) {
 
   useEffect(() => {
     setEditing(false);
+    setPreviewing(false);
     setConfirmingDelete(false);
     setShowHistory(false);
     setError(null);
@@ -237,6 +279,7 @@ export function MarkdownDocument({ path, onNavigate, onMutate }: Props) {
       await api.saveFile(path, draft, reason);
       setContent(draft);
       setEditing(false);
+      setPreviewing(false);
       void getVaultIndex(true);
     } catch {
       setError("저장에 실패했습니다.");
@@ -312,8 +355,6 @@ export function MarkdownDocument({ path, onNavigate, onMutate }: Props) {
   const writeHint = !canWrite(role) ? "view 역할은 수정할 수 없습니다" : "";
   const deleteHint = !canDelete(role) ? "삭제는 adm 역할만 가능합니다" : "";
 
-  const { frontmatter, body } = content != null ? splitFrontmatter(content) : { frontmatter: null, body: "" };
-
   return (
     <main className="p-6 grid" style={{ gridTemplateColumns: siblings.length > 1 ? "200px 1fr" : "1fr", gap: 28 }}>
       {siblings.length > 1 && (
@@ -345,6 +386,7 @@ export function MarkdownDocument({ path, onNavigate, onMutate }: Props) {
                 onClick={() => {
                   setDraft(content ?? "");
                   setReason("");
+                  setPreviewing(false);
                   setEditing(true);
                 }}
               >
@@ -412,7 +454,7 @@ export function MarkdownDocument({ path, onNavigate, onMutate }: Props) {
 
         {editing ? (
           <>
-            <div className="flex justify-end mb-2">
+            <div className="flex justify-end gap-2 mb-2">
               <input
                 ref={fileInputRef}
                 type="file"
@@ -427,18 +469,31 @@ export function MarkdownDocument({ path, onNavigate, onMutate }: Props) {
               <button
                 className="btn btn-secondary"
                 disabled={uploading}
+                onClick={() => setPreviewing((v) => !v)}
+              >
+                {previewing ? "편집으로 돌아가기" : "미리보기"}
+              </button>
+              <button
+                className="btn btn-secondary"
+                disabled={uploading}
                 onClick={() => fileInputRef.current?.click()}
               >
                 {uploading ? "업로드 중…" : "이미지 추가"}
               </button>
             </div>
-            <textarea
-              ref={textareaRef}
-              className="input mono"
-              style={{ minHeight: 420, resize: "vertical" }}
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-            />
+            {previewing ? (
+              <div className="input" style={{ minHeight: 420 }}>
+                <RenderedBody text={draft} currentDir={dir} onNavigate={onNavigate} />
+              </div>
+            ) : (
+              <textarea
+                ref={textareaRef}
+                className="input mono"
+                style={{ minHeight: 420, resize: "vertical" }}
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+              />
+            )}
             <div className="blueprint p-5 mt-5">
               <i className="corner tl" /><i className="corner tr" /><i className="corner bl" /><i className="corner br" />
               <div className="field mb-3.5">
@@ -447,36 +502,12 @@ export function MarkdownDocument({ path, onNavigate, onMutate }: Props) {
               </div>
               <div className="flex gap-2.5">
                 <button className="btn btn-primary" disabled={busy} onClick={save}>변경 저장</button>
-                <button className="btn btn-secondary" onClick={() => setEditing(false)}>취소</button>
+                <button className="btn btn-secondary" onClick={() => { setEditing(false); setPreviewing(false); }}>취소</button>
               </div>
             </div>
           </>
         ) : (
-          content != null && (
-            <article className="md-body">
-              {frontmatter && (
-                <pre className="md-frontmatter mono">{frontmatter}</pre>
-              )}
-              <ReactMarkdown
-                remarkPlugins={[remarkGfm]}
-                urlTransform={urlTransform}
-                components={{
-                  blockquote: Blockquote,
-                  a: (p) => <Link href={p.href} currentDir={dir} onNavigate={onNavigate}>{p.children}</Link>,
-                  img: (p) => <MarkdownImage src={p.src ?? ""} alt={p.alt ?? ""} currentDir={dir} />,
-                  code: (p) => {
-                    const lang = /language-(\w+)/.exec(p.className ?? "")?.[1];
-                    if (lang === "mermaid") {
-                      return <MermaidDiagram code={childText(p.children)} />;
-                    }
-                    return <code className={p.className}>{p.children}</code>;
-                  },
-                }}
-              >
-                {preprocessObsidian(body)}
-              </ReactMarkdown>
-            </article>
-          )
+          content != null && <RenderedBody text={content} currentDir={dir} onNavigate={onNavigate} />
         )}
 
         {!editing && content != null && (
