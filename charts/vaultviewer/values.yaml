@@ -2,7 +2,7 @@
 
 image:
   repository: yoochabi/vaultviewer
-  tag: "0.1.14"
+  tag: "0.1.15"
   pullPolicy: IfNotPresent
 
 imagePullSecrets: []
@@ -153,13 +153,17 @@ securityContext:
   capabilities:
     drop: ["ALL"]
 
-resources: {}
-# resources:
-#   requests:
-#     cpu: 100m
-#     memory: 128Mi
-#   limits:
-#     memory: 256Mi
+# No CPU limit on purpose — a Go process throttled by the CFS scheduler
+# under a CPU limit shows up as latency spikes, not smooth slowdown; the
+# CPU request alone is enough for the scheduler to place the pod sanely.
+# The memory limit *is* set, since an OOM-killed pod is much easier to
+# recover from than one left free to pressure the node.
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    memory: 256Mi
 
 nodeSelector: {}
 tolerations: []

@@ -11,8 +11,10 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/signal"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -230,8 +232,31 @@ func main() {
 	// Service visible to the pod, which would otherwise collide with and
 	// silently override this one.
 	addr := ":" + envOr("VAULTVIEWER_HTTP_PORT", "8080")
-	log.Printf("vaultviewer server listening on %s (mode=%s)", addr, mode)
-	log.Fatal(http.ListenAndServe(addr, withCORS(mux)))
+	srv := &http.Server{Addr: addr, Handler: withCORS(mux)}
+
+	go func() {
+		log.Printf("vaultviewer server listening on %s (mode=%s)", addr, mode)
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("listen: %v", err)
+		}
+	}()
+
+	// On SIGTERM (what Kubernetes sends before killing a pod) or SIGINT,
+	// stop accepting new connections and let in-flight requests finish
+	// instead of dropping them mid-response. WebSocket connections are
+	// hijacked out of net/http's bookkeeping once upgraded, so Shutdown
+	// can't wait on those specifically — the frontend already reconnects
+	// automatically, so a dropped stream just triggers that path.
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
+	<-stop
+
+	log.Print("shutting down: draining in-flight requests")
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := srv.Shutdown(ctx); err != nil {
+		log.Printf("graceful shutdown timed out: %v", err)
+	}
 }
 
 // buildEngine constructs the storage backend selected by VAULTVIEWER_MODE:
