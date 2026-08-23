@@ -1,6 +1,3 @@
-# Personal vault data used as local-mode test content — not for version control.
-vault/
-
 # Kubeconfigs contain live cluster credentials.
 *.kubeconfig
 
