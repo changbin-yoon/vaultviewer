@@ -6,6 +6,8 @@ tags:
 depends_on:
   - "[[01-예제/HMS-메타스토어]]"
   - "[[01-예제/Storage-Ceph]]"
+  - "[[01-예제/Iceberg-카탈로그]]"
+  - "[[01-예제/Kubernetes-클러스터]]"
 ---
 
 # Trino

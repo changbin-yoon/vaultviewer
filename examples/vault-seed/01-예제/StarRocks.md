@@ -1,5 +1,5 @@
 ---
-title: HMS 메타스토어
+title: StarRocks
 type: component
 tags:
   - infra
@@ -8,6 +8,6 @@ depends_on:
   - "[[01-예제/Kubernetes-클러스터]]"
 ---
 
-# HMS 메타스토어
+# StarRocks
 
-테이블 스키마 메타데이터를 관리하는 컴포넌트.
+Trino 대안으로 검토 중인 MPP SQL 엔진.
