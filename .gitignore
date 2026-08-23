@@ -17,6 +17,12 @@ web/dist/
 /vaultviewer
 /mcp-server
 /vv-mcp
+/bin/
+
+# Local MCP server registration — carries a real (test) LDAP password in
+# its env block, so it's never committed. See README's "AI agent 연동"
+# section for the template.
+/.mcp.json
 
 # OS
 .DS_Store
