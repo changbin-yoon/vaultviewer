@@ -282,15 +282,21 @@ export function SecretPanel({
           description="이 경로에 아직 아무것도 없습니다."
           action={
             (canWrite(role) || (canDelete(role) && state.groupPath !== "")) && (
-              <div className="flex gap-2.5 justify-center">
+              // A single box (EmptyState already draws one) instead of nesting
+              // another bordered card per mode — that doubled-border look
+              // changed shape awkwardly as forms/button rows swapped in and
+              // out. flex-wrap keeps the button row (which grows with role/
+              // permission combinations) from spilling past the box's edges;
+              // this box has no fixed size, so it grows/shrinks with whichever
+              // mode is showing.
+              <div className="text-left">
                 {confirmingDeleteGroup ? (
-                  <div className="blueprint p-5 text-left" style={{ minWidth: 280 }}>
-                    <i className="corner tl" /><i className="corner tr" /><i className="corner bl" /><i className="corner br" />
+                  <div>
                     <p className="text-sm mb-4" style={{ color: "#b3432f" }}>
                       /{state.groupPath}을(를) 삭제할까요?
                     </p>
                     {actionError && <p className="text-sm mb-3" style={{ color: "#b3432f" }}>{actionError}</p>}
-                    <div className="flex gap-2.5">
+                    <div className="flex gap-2.5 justify-center">
                       <button
                         className="btn btn-secondary"
                         disabled={busy}
@@ -304,8 +310,7 @@ export function SecretPanel({
                     </div>
                   </div>
                 ) : creatingNote ? (
-                  <div className="blueprint p-5 text-left" style={{ minWidth: 280 }}>
-                    <i className="corner tl" /><i className="corner tr" /><i className="corner bl" /><i className="corner br" />
+                  <div>
                     <div className="field mb-4">
                       <label>노트 이름</label>
                       <input
@@ -317,7 +322,7 @@ export function SecretPanel({
                       />
                     </div>
                     {actionError && <p className="text-sm mb-3" style={{ color: "#b3432f" }}>{actionError}</p>}
-                    <div className="flex gap-2.5">
+                    <div className="flex gap-2.5 justify-center">
                       <button
                         className="btn btn-primary"
                         disabled={busy || !newNoteName.trim()}
@@ -329,8 +334,7 @@ export function SecretPanel({
                     </div>
                   </div>
                 ) : addingKey ? (
-                  <div className="blueprint p-5 text-left" style={{ minWidth: 280 }}>
-                    <i className="corner tl" /><i className="corner tr" /><i className="corner bl" /><i className="corner br" />
+                  <div>
                     <div className="field mb-3.5">
                       <label>키 이름</label>
                       <input className="input mono" value={newKeyName} onChange={(e) => setNewKeyName(e.target.value)} autoFocus />
@@ -346,7 +350,7 @@ export function SecretPanel({
                       />
                     </div>
                     {actionError && <p className="text-sm mb-3" style={{ color: "#b3432f" }}>{actionError}</p>}
-                    <div className="flex gap-2.5">
+                    <div className="flex gap-2.5 justify-center">
                       <button
                         className="btn btn-primary"
                         disabled={busy || !newKeyName.trim()}
@@ -358,8 +362,7 @@ export function SecretPanel({
                     </div>
                   </div>
                 ) : creatingNamespace ? (
-                  <div className="blueprint p-5 text-left" style={{ minWidth: 280 }}>
-                    <i className="corner tl" /><i className="corner tr" /><i className="corner bl" /><i className="corner br" />
+                  <div>
                     <div className="field mb-4">
                       <label>네임스페이스 이름</label>
                       <input
@@ -371,7 +374,7 @@ export function SecretPanel({
                       />
                     </div>
                     {actionError && <p className="text-sm mb-3" style={{ color: "#b3432f" }}>{actionError}</p>}
-                    <div className="flex gap-2.5">
+                    <div className="flex gap-2.5 justify-center">
                       <button
                         className="btn btn-primary"
                         disabled={busy || !newNamespaceName.trim()}
@@ -383,7 +386,7 @@ export function SecretPanel({
                     </div>
                   </div>
                 ) : (
-                  <>
+                  <div className="flex flex-wrap gap-2.5 justify-center">
                     {canWrite(role) && (
                       <>
                         <button className="btn btn-primary" onClick={() => setCreatingNamespace(true)}>
@@ -402,7 +405,7 @@ export function SecretPanel({
                         이 네임스페이스 삭제
                       </button>
                     )}
-                  </>
+                  </div>
                 )}
               </div>
             )
