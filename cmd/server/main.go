@@ -27,6 +27,7 @@ import (
 	"github.com/vaultviewer/vaultviewer/internal/storage"
 	"github.com/vaultviewer/vaultviewer/internal/storage/k8s"
 	"github.com/vaultviewer/vaultviewer/internal/storage/local"
+	"github.com/vaultviewer/vaultviewer/internal/teams"
 )
 
 func main() {
@@ -69,11 +70,16 @@ func main() {
 		}
 	}
 
+	teamsStore, err := buildTeamsStore(mode)
+	if err != nil {
+		log.Fatalf("init group-team store: %v", err)
+	}
+
 	ldapCfg, err := auth.LoadConfigFromEnv()
 	if err != nil {
 		log.Fatalf("load LDAP config: %v", err)
 	}
-	authenticator := auth.NewLDAPAuthenticator(ldapCfg)
+	authenticator := auth.NewLDAPAuthenticator(ldapCfg, teamsStore)
 	sm := auth.NewSessionManager(sessionSecret(), sessionTTL())
 	loginThrottle := auth.NewLoginThrottle()
 
@@ -241,6 +247,36 @@ func main() {
 		json.NewEncoder(w).Encode(configInfo)
 	}))
 
+	mux.HandleFunc("/api/group-teams", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			auth.RequireAdmin(sm, func(w http.ResponseWriter, r *http.Request, _ model.User) {
+				m, err := teamsStore.Get()
+				if err != nil {
+					http.Error(w, err.Error(), http.StatusInternalServerError)
+					return
+				}
+				w.Header().Set("Content-Type", "application/json")
+				json.NewEncoder(w).Encode(m)
+			})(w, r)
+		case http.MethodPut:
+			auth.RequireAdmin(sm, func(w http.ResponseWriter, r *http.Request, _ model.User) {
+				var m map[string]string
+				if err := json.NewDecoder(r.Body).Decode(&m); err != nil {
+					http.Error(w, "invalid request body", http.StatusBadRequest)
+					return
+				}
+				if err := teamsStore.Set(m); err != nil {
+					http.Error(w, err.Error(), http.StatusInternalServerError)
+					return
+				}
+				w.WriteHeader(http.StatusNoContent)
+			})(w, r)
+		default:
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
+	})
+
 	staticDir := envOr("VAULTVIEWER_STATIC_DIR", "web/dist")
 	if _, err := os.Stat(staticDir); err == nil {
 		mux.Handle("/", http.FileServer(http.Dir(staticDir)))
@@ -299,6 +335,25 @@ func buildAuditRecorder(mode string) (*audit.MemoryRecorder, error) {
 	}
 	log.Printf("audit log persisted to %s", path)
 	return recorder, nil
+}
+
+// buildTeamsStore chooses where the admin-managed group-to-team-name
+// mapping lives, mirroring buildAuditRecorder's local-vs-cluster choice:
+// local mode already has a persistent volume to put a durable file on;
+// cluster mode has no equivalent persistent location without adding a new
+// dependency, so edits there don't survive a restart.
+func buildTeamsStore(mode string) (teams.Store, error) {
+	if mode != "local" {
+		return teams.NewMemoryStore(), nil
+	}
+	root := envOr("VAULT_LOCAL_ROOT", "/data")
+	path := filepath.Join(root, ".vaultviewer-group-teams.json")
+	store, err := teams.NewFileStore(path)
+	if err != nil {
+		return nil, err
+	}
+	log.Printf("group-team map persisted to %s", path)
+	return store, nil
 }
 
 // buildEngine constructs the storage backend selected by VAULTVIEWER_MODE:

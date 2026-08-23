@@ -88,6 +88,20 @@ export function getConfig() {
   return request<Config>("/api/config");
 }
 
+// LDAP 그룹 CN -> 화면에 보여줄 팀 이름. 역할 부여(auth.Config의
+// GroupRoleMap)와는 별개로, adm이 설정 화면에서 직접 관리하는 값.
+export function getGroupTeams() {
+  return request<Record<string, string>>("/api/group-teams");
+}
+
+export function saveGroupTeams(mapping: Record<string, string>) {
+  return request<void>("/api/group-teams", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(mapping),
+  });
+}
+
 export function listTree(path: string) {
   const qs = new URLSearchParams({ path });
   return request<FileItem[] | null>(`/api/tree?${qs}`);

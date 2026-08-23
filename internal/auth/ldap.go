@@ -9,6 +9,7 @@ import (
 	goldap "github.com/go-ldap/ldap/v3"
 
 	"github.com/vaultviewer/vaultviewer/internal/model"
+	"github.com/vaultviewer/vaultviewer/internal/teams"
 )
 
 // ErrInvalidCredentials is returned when a username/password pair does not
@@ -33,14 +34,17 @@ type Authenticator interface {
 // service account to locate the user's DN and group memberships, then
 // binds as that DN with the supplied password to verify credentials.
 type LDAPAuthenticator struct {
-	cfg Config
+	cfg   Config
+	teams teams.Store
 }
 
 var _ Authenticator = (*LDAPAuthenticator)(nil)
 
-// NewLDAPAuthenticator constructs an LDAPAuthenticator from cfg.
-func NewLDAPAuthenticator(cfg Config) *LDAPAuthenticator {
-	return &LDAPAuthenticator{cfg: cfg}
+// NewLDAPAuthenticator constructs an LDAPAuthenticator from cfg. teamsStore
+// resolves a user's displayed "소속" (affiliation) from their LDAP group
+// membership — see resolveDepartment.
+func NewLDAPAuthenticator(cfg Config, teamsStore teams.Store) *LDAPAuthenticator {
+	return &LDAPAuthenticator{cfg: cfg, teams: teamsStore}
 }
 
 func (a *LDAPAuthenticator) dial() (*goldap.Conn, error) {
@@ -102,7 +106,29 @@ func (a *LDAPAuthenticator) Authenticate(username, password string) (*model.User
 		return nil, ErrNoRole
 	}
 
-	return &model.User{Username: username, Role: role, Department: department}, nil
+	return &model.User{Username: username, Role: role, Department: a.resolveDepartment(groups, department)}, nil
+}
+
+// resolveDepartment prefers the admin-managed group-to-team-name mapping
+// (Settings page, editable at runtime) over the LDAP "o" attribute
+// (ldapOrg, fixed per-directory-entry): the mapping is what an admin
+// without LDAP write access can actually keep up to date. The first of the
+// user's groups with an entry in the mapping wins; if none match, ldapOrg
+// is used as-is (possibly empty).
+func (a *LDAPAuthenticator) resolveDepartment(groups []string, ldapOrg string) string {
+	if a.teams == nil {
+		return ldapOrg
+	}
+	mapping, err := a.teams.Get()
+	if err != nil {
+		return ldapOrg
+	}
+	for _, g := range groups {
+		if name, ok := mapping[g]; ok && name != "" {
+			return name
+		}
+	}
+	return ldapOrg
 }
 
 // lookupUser resolves username to its DN and its "o" (organizationName)
