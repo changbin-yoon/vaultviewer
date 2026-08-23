@@ -11,8 +11,9 @@ import { SettingsPage } from "./components/SettingsPage";
 import { GraphView } from "./components/GraphView";
 import { TagsPage } from "./components/TagsPage";
 import { SearchPage } from "./components/SearchPage";
+import { GuidePage } from "./components/GuidePage";
 
-type View = "vault" | "graph" | "tags" | "search" | "audit" | "settings";
+type View = "vault" | "graph" | "tags" | "search" | "audit" | "guide" | "settings";
 
 function Shell() {
   const [view, setView] = useState<View>("vault");
@@ -95,6 +96,7 @@ function Shell() {
         />
       )}
       {view === "audit" && <AuditLogPage />}
+      {view === "guide" && <GuidePage />}
       {view === "settings" && <SettingsPage config={config} />}
     </div>
   );

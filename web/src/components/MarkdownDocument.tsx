@@ -172,7 +172,7 @@ function Link({
   );
 }
 
-function RenderedBody({
+export function RenderedBody({
   text,
   currentDir,
   onNavigate,
