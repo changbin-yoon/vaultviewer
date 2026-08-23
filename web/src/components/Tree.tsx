@@ -29,10 +29,19 @@ export function Tree({
   selectedPath,
   onSelect,
   onCollapse,
+  refreshSignal,
 }: {
   selectedPath: string | null;
   onSelect: (path: string) => void;
   onCollapse?: () => void;
+  // Bumped by the parent whenever a note/namespace is created or deleted
+  // elsewhere (the main panel, not this tree) — those don't touch this
+  // component's state directly, so without this the tree would keep
+  // showing whatever it last fetched. On change, re-fetch the root and
+  // every currently-expanded folder (not the whole cache blindly — a
+  // collapsed folder's stale entry is harmless since it re-fetches the
+  // next time it's opened anyway).
+  refreshSignal?: number;
 }) {
   const { session } = useAuth();
   const role = session!.role;
@@ -53,6 +62,21 @@ export function Tree({
   }
 
   useEffect(refreshRoot, []);
+
+  useEffect(() => {
+    if (!refreshSignal) return; // 0/undefined: initial mount, nothing to refresh yet
+    refreshRoot();
+    for (const [path, node] of Object.entries(byPath)) {
+      if (!node.expanded) continue;
+      api
+        .listTree(path)
+        .then((children) => setByPath((prev) => ({ ...prev, [path]: { ...prev[path], children: children ?? [] } })))
+        .catch(() => {});
+    }
+    // Only react to refreshSignal itself — byPath is read for its value at
+    // that moment, not to re-run this on every expand/collapse.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refreshSignal]);
 
   async function submitNamespace() {
     const trimmed = newNamespaceName.trim();

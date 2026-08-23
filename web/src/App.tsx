@@ -18,6 +18,11 @@ function Shell() {
   const [view, setView] = useState<View>("vault");
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [config, setConfig] = useState<Config | null>(null);
+  // Bumped whenever a note/namespace is created or deleted, so the sidebar
+  // tree (which caches what it's fetched) knows to refresh — see Tree's
+  // refreshSignal prop.
+  const [vaultVersion, setVaultVersion] = useState(0);
+  const bumpVaultVersion = () => setVaultVersion((v) => v + 1);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     try {
       return localStorage.getItem("vv_sidebar_collapsed") === "1";
@@ -59,9 +64,10 @@ function Shell() {
               selectedPath={selectedPath}
               onSelect={setSelectedPath}
               onCollapse={() => setSidebarCollapsed(true)}
+              refreshSignal={vaultVersion}
             />
           )}
-          <SecretPanel selectedPath={selectedPath} onNavigate={setSelectedPath} />
+          <SecretPanel selectedPath={selectedPath} onNavigate={setSelectedPath} onMutate={bumpVaultVersion} />
         </div>
       )}
       {view === "graph" && (

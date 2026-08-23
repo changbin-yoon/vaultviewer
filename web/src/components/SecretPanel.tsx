@@ -31,7 +31,17 @@ async function loadKeyRow(item: FileItem): Promise<KeyRow> {
   return { path: item.path, name: item.name, content: api.decodeContent(file.content), latest };
 }
 
-export function SecretPanel({ selectedPath, onNavigate }: { selectedPath: string | null; onNavigate: (path: string) => void }) {
+export function SecretPanel({
+  selectedPath,
+  onNavigate,
+  onMutate,
+}: {
+  selectedPath: string | null;
+  onNavigate: (path: string) => void;
+  // Called after a note/namespace is created or deleted here, so the
+  // sidebar tree knows to refresh (it doesn't share state with this panel).
+  onMutate?: () => void;
+}) {
   const { session } = useAuth();
   const role = session!.role;
   const [state, setState] = useState<ViewState>({ kind: "loading" });
@@ -104,6 +114,7 @@ export function SecretPanel({ selectedPath, onNavigate }: { selectedPath: string
       await api.saveFile(path, "", "새 노트 생성");
       setCreatingNote(false);
       setNewNoteName("");
+      onMutate?.();
       onNavigate(path);
     } catch {
       setActionError("노트 생성에 실패했습니다.");
@@ -122,9 +133,28 @@ export function SecretPanel({ selectedPath, onNavigate }: { selectedPath: string
       await api.createNamespace(path);
       setCreatingNamespace(false);
       setNewNamespaceName("");
+      onMutate?.();
       onNavigate(path);
     } catch {
       setActionError("네임스페이스 생성에 실패했습니다.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // The only way to remove an empty namespace once created — a non-empty
+  // one is removed via deleteGroup below instead (deletes its keys, which
+  // takes the now-childless directory with it).
+  async function deleteEmptyNamespace(groupPath: string) {
+    setConfirmingDeleteGroup(false);
+    setBusy(true);
+    setActionError(null);
+    try {
+      await api.deleteFile(groupPath);
+      onMutate?.();
+      onNavigate(groupPath.split("/").slice(0, -1).join("/"));
+    } catch {
+      setActionError("삭제에 실패했습니다.");
     } finally {
       setBusy(false);
     }
@@ -138,7 +168,7 @@ export function SecretPanel({ selectedPath, onNavigate }: { selectedPath: string
     );
   }
   if (selectedPath.endsWith(".md")) {
-    return <MarkdownDocument path={selectedPath} onNavigate={onNavigate} />;
+    return <MarkdownDocument path={selectedPath} onNavigate={onNavigate} onMutate={onMutate} />;
   }
   if (state.kind === "loading") {
     return <main className="p-8 text-sm text-muted">불러오는 중…</main>;
@@ -251,9 +281,29 @@ export function SecretPanel({ selectedPath, onNavigate }: { selectedPath: string
           title={<span className="mono">/{state.groupPath}</span>}
           description="이 경로에 아직 아무것도 없습니다."
           action={
-            canWrite(role) && (
+            (canWrite(role) || (canDelete(role) && state.groupPath !== "")) && (
               <div className="flex gap-2.5 justify-center">
-                {creatingNote ? (
+                {confirmingDeleteGroup ? (
+                  <div className="blueprint p-5 text-left" style={{ minWidth: 280 }}>
+                    <i className="corner tl" /><i className="corner tr" /><i className="corner bl" /><i className="corner br" />
+                    <p className="text-sm mb-4" style={{ color: "#b3432f" }}>
+                      /{state.groupPath}을(를) 삭제할까요?
+                    </p>
+                    {actionError && <p className="text-sm mb-3" style={{ color: "#b3432f" }}>{actionError}</p>}
+                    <div className="flex gap-2.5">
+                      <button
+                        className="btn btn-secondary"
+                        disabled={busy}
+                        onClick={() => deleteEmptyNamespace(state.groupPath)}
+                      >
+                        삭제 확인
+                      </button>
+                      <button className="btn btn-secondary" disabled={busy} onClick={() => setConfirmingDeleteGroup(false)}>
+                        취소
+                      </button>
+                    </div>
+                  </div>
+                ) : creatingNote ? (
                   <div className="blueprint p-5 text-left" style={{ minWidth: 280 }}>
                     <i className="corner tl" /><i className="corner tr" /><i className="corner bl" /><i className="corner br" />
                     <div className="field mb-4">
@@ -334,15 +384,24 @@ export function SecretPanel({ selectedPath, onNavigate }: { selectedPath: string
                   </div>
                 ) : (
                   <>
-                    <button className="btn btn-primary" onClick={() => setCreatingNamespace(true)}>
-                      새 네임스페이스
-                    </button>
-                    <button className="btn btn-secondary" onClick={() => setCreatingNote(true)}>
-                      새 노트 만들기
-                    </button>
-                    <button className="btn btn-secondary" onClick={() => setAddingKey(true)}>
-                      키·값 만들기
-                    </button>
+                    {canWrite(role) && (
+                      <>
+                        <button className="btn btn-primary" onClick={() => setCreatingNamespace(true)}>
+                          새 네임스페이스
+                        </button>
+                        <button className="btn btn-secondary" onClick={() => setCreatingNote(true)}>
+                          새 노트 만들기
+                        </button>
+                        <button className="btn btn-secondary" onClick={() => setAddingKey(true)}>
+                          키·값 만들기
+                        </button>
+                      </>
+                    )}
+                    {canDelete(role) && state.groupPath !== "" && (
+                      <button className="btn btn-secondary" onClick={() => setConfirmingDeleteGroup(true)}>
+                        이 네임스페이스 삭제
+                      </button>
+                    )}
                   </>
                 )}
               </div>
@@ -389,6 +448,7 @@ export function SecretPanel({ selectedPath, onNavigate }: { selectedPath: string
       setAddingKey(false);
       setNewKeyName("");
       setNewKeyValue("");
+      onMutate?.();
       await load(groupPath);
     } catch {
       setActionError("키 추가에 실패했습니다.");
@@ -403,6 +463,7 @@ export function SecretPanel({ selectedPath, onNavigate }: { selectedPath: string
     setActionError(null);
     try {
       await Promise.all(rows.map((r) => api.deleteFile(r.path)));
+      onMutate?.();
       onNavigate(groupPath.split("/").slice(0, -1).join("/"));
     } catch {
       setActionError("삭제에 실패했습니다.");

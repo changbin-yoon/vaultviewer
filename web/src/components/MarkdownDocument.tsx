@@ -164,9 +164,12 @@ function Link({
 interface Props {
   path: string;
   onNavigate: (path: string) => void;
+  // Called after this note is deleted, so the sidebar tree (which doesn't
+  // share state with this component) knows to refresh.
+  onMutate?: () => void;
 }
 
-export function MarkdownDocument({ path, onNavigate }: Props) {
+export function MarkdownDocument({ path, onNavigate, onMutate }: Props) {
   const { session } = useAuth();
   const role = session!.role;
   const [content, setContent] = useState<string | null>(null);
@@ -275,6 +278,7 @@ export function MarkdownDocument({ path, onNavigate }: Props) {
     try {
       await api.deleteFile(path);
       void getVaultIndex(true);
+      onMutate?.();
       onNavigate(dir);
     } catch {
       setError("삭제에 실패했습니다.");
