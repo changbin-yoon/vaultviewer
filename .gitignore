@@ -14,6 +14,9 @@ web/dist/
 
 # Go
 *.test
+/vaultviewer
+/mcp-server
+/vv-mcp
 
 # OS
 .DS_Store

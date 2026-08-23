@@ -3,6 +3,24 @@
 VaultViewer의 주요 변경 사항을 최신순으로 기록합니다. 버전 번호는 Docker 이미지 태그
 (`yoochabi/vaultviewer:<version>`)이자 Helm 차트의 `appVersion`입니다.
 
+## 0.1.35
+
+- 기능 추가: `cmd/mcp-server` — VaultViewer REST API를 MCP(Model Context
+  Protocol) 서버로 감싼 별도 바이너리. Claude Code/Claude Desktop 같은 MCP
+  클라이언트가 `search_vault`/`read_note`/`list_tree`/`get_note_history`/
+  `get_ontology_graph` 5개 읽기 전용 툴로 볼트를 조회할 수 있음. storage나
+  auth 로직을 새로 구현하지 않고 이미 떠 있는 `cmd/server`의 `/api/*`를
+  단일 서비스 계정(env var로 자격 증명 전달, 하드코딩 없음)으로 호출하는
+  얇은 클라이언트 — RBAC/감사 정책은 그대로 상속(서비스 계정 role이 곧
+  agent 권한 상한, view면 충분). 세션 토큰은 캐싱하고 401을 받으면 한 번
+  재로그인 후 재시도. `--transport stdio`(기본, Claude Code가 `.mcp.json`
+  으로 로컬 프로세스 실행)와 `--transport http`(공식 Go SDK의 Streamable
+  HTTP 핸들러, 여러 agent가 네트워크로 공유 접속하는 방식) 두 연결 방식을
+  모두 코드로 지원 — 이번 릴리스는 stdio 경로만 실제 빌드/테스트/데모
+  서버 대상 handshake 검증까지 완료, HTTP 트랜스포트의 Docker/Helm 배포는
+  다음 단계로 미룸. 메인 Docker 이미지에는 포함되지 않는 별도 바이너리라
+  `image.tag`/Helm 버전은 변경 없음
+
 ## 0.1.34
 
 - 기능 추가: `GET /api/graph` — 볼트 전체의 노드/타입 있는 관계를 JSON으로
