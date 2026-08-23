@@ -1,5 +1,6 @@
 // Package storage defines the unified interface that all vault backends
-// (local filesystem, Kubernetes, and future Git integration) must implement.
+// (local filesystem, Kubernetes, and git — see internal/storage/git) must
+// implement.
 package storage
 
 import "github.com/vaultviewer/vaultviewer/internal/model"

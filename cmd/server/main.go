@@ -25,6 +25,7 @@ import (
 	"github.com/vaultviewer/vaultviewer/internal/backup"
 	"github.com/vaultviewer/vaultviewer/internal/model"
 	"github.com/vaultviewer/vaultviewer/internal/storage"
+	"github.com/vaultviewer/vaultviewer/internal/storage/git"
 	"github.com/vaultviewer/vaultviewer/internal/storage/k8s"
 	"github.com/vaultviewer/vaultviewer/internal/storage/local"
 	"github.com/vaultviewer/vaultviewer/internal/teams"
@@ -368,12 +369,20 @@ func buildEngine(mode string, recorder storage.AuditRecorder) (storage.VaultStor
 	switch mode {
 	case "local":
 		root := envOr("VAULT_LOCAL_ROOT", "/data")
-		engine, err := local.New(root, recorder)
+		localEngine, err := local.New(root, recorder)
 		if err != nil {
 			return nil, nil, fmt.Errorf("init local storage engine: %w", err)
 		}
 		log.Printf("local storage engine rooted at %s", root)
-		return engine, map[string]string{"mode": "LOCAL", "backend": "filesystem", "root": root}, nil
+		if os.Getenv("VAULTVIEWER_GIT_ENABLED") != "true" {
+			return localEngine, map[string]string{"mode": "LOCAL", "backend": "filesystem", "root": root}, nil
+		}
+		gitEngine, err := git.New(localEngine, root)
+		if err != nil {
+			return nil, nil, fmt.Errorf("init git storage engine: %w", err)
+		}
+		log.Printf("git-backed versioning enabled at %s", root)
+		return gitEngine, map[string]string{"mode": "LOCAL", "backend": "filesystem+git", "root": root}, nil
 	case "cluster":
 		namespace := os.Getenv("VAULTVIEWER_K8S_NAMESPACE")
 		if namespace == "" {

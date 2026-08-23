@@ -3,6 +3,21 @@
 VaultViewer의 주요 변경 사항을 최신순으로 기록합니다. 버전 번호는 Docker 이미지 태그
 (`yoochabi/vaultviewer:<version>`)이자 Helm 차트의 `appVersion`입니다.
 
+## 0.1.30
+
+- 기능 추가(실험적): Git 백엔드 — `local.git.enabled: true`로 켜면 마운트된
+  디렉토리가 실제 git 저장소가 되고, 노트를 저장·삭제할 때마다 자동 커밋됨
+  (author는 실제 작업한 사용자, committer는 고정 "VaultViewer" 서비스 계정).
+  로컬 저장소 전용(외부 push 없음), 기존 감사 로그와는 완전히 별개로 병행
+  동작 — `GetHistory`/`/api/audit`는 그대로. `internal/storage/local.Engine`을
+  감싸는 데코레이터로 구현(`internal/storage/git`), List/Read/GetHistory/Search는
+  그대로 통과. 배포 시 PVC 마운트 지점이 흔히 root 소유로 잡히는 문제
+  (git의 "dubious ownership" 보호에 걸림) 때문에 부트스트랩에서
+  `safe.directory`를 매 시작마다 등록하도록 처리
+- 기존 감사 로그 없이 시작한 볼트에서 처음 켜면, 있던 내용을 담아 초기 커밋
+  한 번을 만듦. 감사 로그·그룹별 팀 매핑 파일은 `.gitignore`로 제외돼 커밋에
+  섞이지 않음
+
 ## 0.1.28
 
 - 기능 추가: 설정 화면(adm 전용)에 "그룹별 팀 매핑" 관리 추가 — LDAP 그룹 CN을

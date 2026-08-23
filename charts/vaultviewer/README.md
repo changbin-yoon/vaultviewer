@@ -155,6 +155,34 @@ DB가 없어서 둘 다 파일(local 모드) 또는 메모리(cluster 모드)로
 두 파일 모두 마운트된 디렉토리 루트의 점 파일이라 볼트 트리 UI에는 자동으로
 숨겨지고, 위 S3 백업을 켜두면 동기화 대상에도 포함됩니다.
 
+## Git 백엔드 (local 모드, 실험적)
+
+`local.git.enabled: true`로 켜면 마운트된 디렉토리가 진짜 git 저장소가 되고,
+노트를 저장·삭제할 때마다 자동으로 커밋됩니다 — 커밋 author는 실제 작업한
+사용자, committer는 고정된 "VaultViewer" 서비스 계정입니다.
+
+```yaml
+local:
+  git:
+    enabled: true
+```
+
+- **로컬 저장소만** — 원격(GitHub/GitLab 등)으로 push하지 않습니다. 필요하면
+  파드 안에서 직접 `git remote add` + `git push`를 하거나, 향후 단계로 미룸.
+- **기존 감사 로그와는 별개** — `/api/audit`·설정 화면의 "노트 이력"은 지금처럼
+  `.vaultviewer-audit.jsonl` 기반으로 그대로 동작합니다. git 저장소는 병행하는
+  추가 레이어로, 실제 diff·git 도구가 필요할 때 파드 안에서 직접 확인하세요:
+  ```bash
+  kubectl exec deploy/vaultviewer -- git -C /data log --oneline
+  kubectl exec deploy/vaultviewer -- git -C /data show <commit>
+  ```
+- 감사 로그·그룹별 팀 매핑 파일(위 참고)은 `.gitignore`로 제외돼 있어 커밋에
+  섞이지 않습니다.
+- 기존에 데이터가 있던 볼트에서 처음 켜면, 있던 내용을 담아 초기 커밋 한 번을
+  만듭니다. 이후 재시작에서는 다시 초기화하지 않습니다(멱등).
+- 빈 디렉토리(네임스페이스만 만들고 파일이 없는 경우)는 git이 표현할 수 없어
+  커밋되지 않습니다 — 그 안에 첫 파일이 저장돼야 git에 나타납니다.
+
 ## 모드별 참고사항
 
 - **local**: `local.persistence`로 PVC를 만들거나(`existingClaim`) 기존 PVC를 재사용합니다.

@@ -17,7 +17,7 @@ RUN CGO_ENABLED=0 go build -o /out/vaultviewer ./cmd/server
 
 ## Runtime
 FROM alpine:3.20
-RUN apk add --no-cache ca-certificates && \
+RUN apk add --no-cache ca-certificates git && \
     addgroup -g 65532 vaultviewer && \
     adduser -D -u 65532 -G vaultviewer vaultviewer
 WORKDIR /app

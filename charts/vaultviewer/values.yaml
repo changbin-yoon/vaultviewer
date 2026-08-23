@@ -2,7 +2,7 @@
 
 image:
   repository: yoochabi/vaultviewer
-  tag: "0.1.28"
+  tag: "0.1.30"
   pullPolicy: IfNotPresent
 
 imagePullSecrets: []
@@ -31,6 +31,13 @@ local:
     accessMode: ReadWriteOnce
     size: 5Gi
     mountPath: /data
+  git:
+    # Makes the mounted directory a real git repository — every save/delete
+    # is also committed there (author = the acting user, committer = a
+    # fixed "VaultViewer" service identity). Local-repo only, no push to a
+    # remote. Off by default; existing audit log/history behavior is
+    # unchanged either way — this runs alongside it, not instead of it.
+    enabled: false
 
 # -- CLUSTER mode --------------------------------------------------------
 cluster:

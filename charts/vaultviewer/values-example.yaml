@@ -27,6 +27,8 @@ local:
     size: 5Gi
     mountPath: /data
     # storageClass: ""   # leave unset to use your cluster's default
+  # git:
+  #   enabled: true   # makes the PVC a real git repo, auto-committing every save/delete
 
 ldap:
   host: "ldap.example.com"          # or an in-cluster Service DNS name
