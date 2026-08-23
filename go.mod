@@ -4,6 +4,7 @@ go 1.26.7
 
 require (
 	github.com/go-ldap/ldap/v3 v3.4.14
+	github.com/gorilla/websocket v1.5.4-0.20250319132907-e064f32e3674
 	github.com/minio/minio-go/v7 v7.3.0
 	k8s.io/api v0.36.4
 	k8s.io/apimachinery v0.36.4

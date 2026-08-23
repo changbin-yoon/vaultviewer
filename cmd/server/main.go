@@ -9,10 +9,13 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/gorilla/websocket"
 
 	"github.com/vaultviewer/vaultviewer/internal/audit"
 	"github.com/vaultviewer/vaultviewer/internal/auth"
@@ -199,6 +202,8 @@ func main() {
 		json.NewEncoder(w).Encode(entries)
 	}))
 
+	mux.HandleFunc("/ws/audit", auditWebSocketHandler(sm, recorder))
+
 	mux.HandleFunc("/api/me", auth.RequireAuth(sm, func(w http.ResponseWriter, r *http.Request, user model.User) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]string{
@@ -282,6 +287,96 @@ func withCORS(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+const (
+	wsPongWait   = 60 * time.Second
+	wsPingPeriod = (wsPongWait * 9) / 10
+	wsWriteWait  = 10 * time.Second
+)
+
+var wsUpgrader = websocket.Upgrader{CheckOrigin: wsCheckOrigin}
+
+// wsCheckOrigin allows same-origin WebSocket handshakes (the default
+// deployment, frontend served from this same process) and the explicit
+// VAULTVIEWER_CORS_ORIGIN allowlist (a separately served dev frontend),
+// mirroring withCORS's REST policy. gorilla/websocket otherwise rejects
+// every cross-origin handshake by default.
+func wsCheckOrigin(r *http.Request) bool {
+	origin := r.Header.Get("Origin")
+	if origin == "" {
+		return true
+	}
+	if u, err := url.Parse(origin); err == nil && u.Host == r.Host {
+		return true
+	}
+	return origin == envOr("VAULTVIEWER_CORS_ORIGIN", "http://localhost:5173")
+}
+
+// auditWebSocketHandler streams every new audit log entry to the client as
+// audit.MemoryRecorder.Record is called, so the audit log view updates
+// live instead of polling. Auth uses a ?token= query parameter rather than
+// the Authorization header every other endpoint requires, since browsers
+// cannot set custom headers on a WebSocket handshake request.
+func auditWebSocketHandler(sm *auth.SessionManager, recorder *audit.MemoryRecorder) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if _, err := sm.Verify(r.URL.Query().Get("token")); err != nil {
+			http.Error(w, "invalid or expired session", http.StatusUnauthorized)
+			return
+		}
+
+		conn, err := wsUpgrader.Upgrade(w, r, nil)
+		if err != nil {
+			log.Printf("audit ws: upgrade failed: %v", err)
+			return
+		}
+		defer conn.Close()
+
+		ch, unsubscribe := recorder.Subscribe()
+		defer unsubscribe()
+
+		conn.SetReadDeadline(time.Now().Add(wsPongWait))
+		conn.SetPongHandler(func(string) error {
+			conn.SetReadDeadline(time.Now().Add(wsPongWait))
+			return nil
+		})
+
+		// The client never sends messages; this goroutine's only job is to
+		// notice the connection closing (tab closed, network drop) via a
+		// read error, so the main loop below can stop promptly.
+		closed := make(chan struct{})
+		go func() {
+			defer close(closed)
+			for {
+				if _, _, err := conn.NextReader(); err != nil {
+					return
+				}
+			}
+		}()
+
+		ticker := time.NewTicker(wsPingPeriod)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-closed:
+				return
+			case entry, ok := <-ch:
+				if !ok {
+					return
+				}
+				conn.SetWriteDeadline(time.Now().Add(wsWriteWait))
+				if err := conn.WriteJSON(entry); err != nil {
+					return
+				}
+			case <-ticker.C:
+				conn.SetWriteDeadline(time.Now().Add(wsWriteWait))
+				if err := conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+					return
+				}
+			}
+		}
+	}
 }
 
 // sessionSecret loads the HMAC key used to sign session tokens from

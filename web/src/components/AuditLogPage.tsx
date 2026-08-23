@@ -10,11 +10,12 @@ const ACTION_CLASS: Record<string, string> = {
   delete: "tag tag-neutral",
 };
 
-const POLL_MS = 8000;
+const RECONNECT_MS = 3000;
 
 export function AuditLogPage() {
   const [entries, setEntries] = useState<AuditLog[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [live, setLive] = useState(false);
 
   async function refresh() {
     try {
@@ -28,15 +29,55 @@ export function AuditLogPage() {
 
   useEffect(() => {
     void refresh();
-    const id = setInterval(refresh, POLL_MS);
-    return () => clearInterval(id);
+  }, []);
+
+  // Live updates over WebSocket rather than polling: the initial list above
+  // comes from REST, and every entry recorded after that arrives here as
+  // it happens. Reconnects on drop (idle-timeout proxies, network blips)
+  // with a fixed retry delay — simple, and fine at this app's scale.
+  useEffect(() => {
+    let cancelled = false;
+    let ws: WebSocket | null = null;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+
+    function connect() {
+      if (cancelled) return;
+      ws = new WebSocket(api.auditStreamUrl());
+      ws.onopen = () => setLive(true);
+      ws.onmessage = (event) => {
+        try {
+          const entry = JSON.parse(event.data) as AuditLog;
+          setEntries((prev) => [entry, ...(prev ?? [])]);
+        } catch {
+          // Ignore malformed frames rather than tearing down the connection.
+        }
+      };
+      ws.onclose = () => {
+        setLive(false);
+        if (!cancelled) reconnectTimer = setTimeout(connect, RECONNECT_MS);
+      };
+      ws.onerror = () => ws?.close();
+    }
+    connect();
+
+    return () => {
+      cancelled = true;
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      ws?.close();
+    };
   }, []);
 
   return (
     <main className="p-6">
       <div className="flex items-center gap-4 mb-1">
         <h4>감사 로그</h4>
-        <span className="text-xs text-muted">{POLL_MS / 1000}초마다 자동 새로고침</span>
+        <span className="flex items-center gap-1.5 text-xs text-muted">
+          <span
+            className="inline-block rounded-full"
+            style={{ width: 6, height: 6, background: live ? "#4f9d8f" : "var(--color-divider)" }}
+          />
+          {live ? "실시간 연결됨" : "연결 중…"}
+        </span>
         <button className="btn btn-secondary ml-auto" onClick={refresh}>
           새로고침
         </button>

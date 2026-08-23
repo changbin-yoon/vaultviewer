@@ -117,6 +117,15 @@ export function getAudit() {
   return request<AuditLog[] | null>("/api/audit");
 }
 
+// Browsers can't set custom headers on a WebSocket handshake, so the
+// session token travels as a query param here instead of the Authorization
+// header every other endpoint uses — see auditWebSocketHandler server-side.
+export function auditStreamUrl(): string {
+  const proto = location.protocol === "https:" ? "wss:" : "ws:";
+  const qs = new URLSearchParams({ token: token ?? "" });
+  return `${proto}//${location.host}/ws/audit?${qs}`;
+}
+
 export function search(query: string) {
   const qs = new URLSearchParams({ q: query });
   return request<SearchResult[] | null>(`/api/search?${qs}`);

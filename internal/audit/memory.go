@@ -13,21 +13,58 @@ import (
 // MemoryRecorder implements storage.AuditRecorder in process memory. It
 // does not persist across restarts.
 type MemoryRecorder struct {
-	mu      sync.RWMutex
-	entries []model.AuditLog
+	mu          sync.RWMutex
+	entries     []model.AuditLog
+	subscribers map[chan model.AuditLog]struct{}
 }
 
 var _ storage.AuditRecorder = (*MemoryRecorder)(nil)
 
 func NewMemoryRecorder() *MemoryRecorder {
-	return &MemoryRecorder{}
+	return &MemoryRecorder{subscribers: make(map[chan model.AuditLog]struct{})}
 }
 
 func (r *MemoryRecorder) Record(entry model.AuditLog) error {
 	r.mu.Lock()
-	defer r.mu.Unlock()
 	r.entries = append(r.entries, entry)
+	subs := make([]chan model.AuditLog, 0, len(r.subscribers))
+	for ch := range r.subscribers {
+		subs = append(subs, ch)
+	}
+	r.mu.Unlock()
+
+	// Fan out to live WebSocket subscribers outside the lock, and never
+	// block Record (and therefore every Save/Delete caller) on a slow or
+	// stuck consumer — a full channel just drops this event for that one
+	// subscriber instead.
+	for _, ch := range subs {
+		select {
+		case ch <- entry:
+		default:
+		}
+	}
 	return nil
+}
+
+// Subscribe registers a listener for every future Record call, returning a
+// channel of new entries and an unsubscribe function the caller must call
+// exactly once when done (e.g. when its WebSocket connection closes).
+func (r *MemoryRecorder) Subscribe() (<-chan model.AuditLog, func()) {
+	ch := make(chan model.AuditLog, 16)
+	r.mu.Lock()
+	r.subscribers[ch] = struct{}{}
+	r.mu.Unlock()
+
+	var once sync.Once
+	unsubscribe := func() {
+		once.Do(func() {
+			r.mu.Lock()
+			delete(r.subscribers, ch)
+			r.mu.Unlock()
+			close(ch)
+		})
+	}
+	return ch, unsubscribe
 }
 
 func (r *MemoryRecorder) History(path string) ([]model.AuditLog, error) {
