@@ -19,6 +19,11 @@ export interface AuditLog {
   timestamp: string;
 }
 
+export interface SearchResult {
+  path: string;
+  snippet: string;
+}
+
 export interface Config {
   mode: string;
   backend: string;
@@ -110,6 +115,11 @@ export function getHistory(path: string) {
 
 export function getAudit() {
   return request<AuditLog[] | null>("/api/audit");
+}
+
+export function search(query: string) {
+  const qs = new URLSearchParams({ q: query });
+  return request<SearchResult[] | null>(`/api/search?${qs}`);
 }
 
 // The Go backend marshals []byte content fields as base64 in GET

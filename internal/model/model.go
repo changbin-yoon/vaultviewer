@@ -40,6 +40,13 @@ type VaultFile struct {
 	Content []byte `json:"content"`
 }
 
+// SearchResult represents one full-text match found while searching the
+// vault, with a short excerpt of context around the match.
+type SearchResult struct {
+	Path    string `json:"path"`
+	Snippet string `json:"snippet"`
+}
+
 // AuditLog represents a single recorded modification event.
 type AuditLog struct {
 	Path      string    `json:"path"`

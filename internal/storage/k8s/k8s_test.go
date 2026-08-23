@@ -78,3 +78,21 @@ func TestEngineSaveReadListDelete(t *testing.T) {
 		t.Fatalf("unexpected history: %+v", history)
 	}
 }
+
+func TestEngineSearch(t *testing.T) {
+	eng := New(fake.NewSimpleClientset(), "default", &fakeAudit{})
+	if err := eng.Save("db-credentials/password", []byte("hunter2-super-secret"), "alice", ""); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	if err := eng.Save("api-tokens/key", []byte("unrelated value"), "alice", ""); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	results, err := eng.Search("super-secret")
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	if len(results) != 1 || results[0].Path != "db-credentials/password" {
+		t.Fatalf("unexpected search results: %+v", results)
+	}
+}

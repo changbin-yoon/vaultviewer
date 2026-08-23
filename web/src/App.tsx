@@ -10,8 +10,9 @@ import { AuditLogPage } from "./components/AuditLogPage";
 import { SettingsPage } from "./components/SettingsPage";
 import { GraphView } from "./components/GraphView";
 import { TagsPage } from "./components/TagsPage";
+import { SearchPage } from "./components/SearchPage";
 
-type View = "vault" | "graph" | "tags" | "audit" | "settings";
+type View = "vault" | "graph" | "tags" | "search" | "audit" | "settings";
 
 function Shell() {
   const [view, setView] = useState<View>("vault");
@@ -73,6 +74,14 @@ function Shell() {
       )}
       {view === "tags" && (
         <TagsPage
+          onNavigate={(path) => {
+            setSelectedPath(path);
+            setView("vault");
+          }}
+        />
+      )}
+      {view === "search" && (
+        <SearchPage
           onNavigate={(path) => {
             setSelectedPath(path);
             setView("vault");

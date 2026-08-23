@@ -211,3 +211,7 @@ func (e *Engine) GetHistory(path string) ([]model.AuditLog, error) {
 func (e *Engine) CreateNamespace(path string, user string) error {
 	return fmt.Errorf("cluster mode has no empty-namespace concept: create a secret key under %q instead", path)
 }
+
+func (e *Engine) Search(query string) ([]model.SearchResult, error) {
+	return storage.WalkAndSearch(e, query)
+}

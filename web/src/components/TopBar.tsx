@@ -12,8 +12,8 @@ export function TopBar({
   onNavigateView,
 }: {
   config: Config | null;
-  view: "vault" | "graph" | "tags" | "audit" | "settings";
-  onNavigateView: (v: "vault" | "graph" | "tags" | "audit" | "settings") => void;
+  view: "vault" | "graph" | "tags" | "search" | "audit" | "settings";
+  onNavigateView: (v: "vault" | "graph" | "tags" | "search" | "audit" | "settings") => void;
 }) {
   const { session, logout } = useAuth();
   if (!session) return null;
@@ -31,6 +31,7 @@ export function TopBar({
             ["vault", "볼트"],
             ["graph", "그래프"],
             ["tags", "태그"],
+            ["search", "검색"],
             ["audit", "감사 로그"],
             ["settings", "설정"],
           ] as const

@@ -123,6 +123,27 @@ func TestEngineListSkipsDotfiles(t *testing.T) {
 	}
 }
 
+func TestEngineSearch(t *testing.T) {
+	eng, err := New(t.TempDir(), &fakeAudit{})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	if err := eng.Save("00-홈.md", []byte("쿠버네티스 클러스터 운영 노트"), "alice", ""); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	if err := eng.Save("01-예제/노트.md", []byte("아무 관련 없는 내용"), "alice", ""); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	results, err := eng.Search("클러스터")
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	if len(results) != 1 || results[0].Path != "00-홈.md" {
+		t.Fatalf("unexpected search results: %+v", results)
+	}
+}
+
 func TestEnginePathTraversalRejected(t *testing.T) {
 	eng, err := New(t.TempDir(), &fakeAudit{})
 	if err != nil {

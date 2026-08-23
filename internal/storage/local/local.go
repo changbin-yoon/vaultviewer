@@ -137,6 +137,10 @@ func (e *Engine) GetHistory(path string) ([]model.AuditLog, error) {
 	return e.audit.History(path)
 }
 
+func (e *Engine) Search(query string) ([]model.SearchResult, error) {
+	return storage.WalkAndSearch(e, query)
+}
+
 func (e *Engine) CreateNamespace(path string, user string) error {
 	full, err := e.resolve(path)
 	if err != nil {

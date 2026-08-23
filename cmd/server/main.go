@@ -119,6 +119,16 @@ func main() {
 		json.NewEncoder(w).Encode(items)
 	}))
 
+	mux.HandleFunc("/api/search", auth.RequireAuth(sm, func(w http.ResponseWriter, r *http.Request, _ model.User) {
+		results, err := engine.Search(r.URL.Query().Get("q"))
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(results)
+	}))
+
 	mux.HandleFunc("/api/namespace", auth.RequireWrite(sm, func(w http.ResponseWriter, r *http.Request, user model.User) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)

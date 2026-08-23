@@ -17,6 +17,11 @@ type VaultStorageEngine interface {
 	// Kubernetes Secrets, where a namespace only exists once it holds a
 	// secret) return an error explaining the limitation.
 	CreateNamespace(path string, user string) error // adm, dev
+	// Search performs a case-insensitive full-text search across every
+	// searchable file in the vault, returning a short snippet of context
+	// around each match. Backends without a more efficient option can
+	// implement this with one line via WalkAndSearch.
+	Search(query string) ([]model.SearchResult, error)
 }
 
 // AuditRecorder is the dependency storage backends use to record and
