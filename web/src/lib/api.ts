@@ -36,9 +36,13 @@ export interface Config {
 
 export class ApiError extends Error {
   status: number;
-  constructor(status: number, message: string) {
+  // Seconds to wait before retrying, from a 429 response's Retry-After
+  // header (login throttling). Undefined for any other status.
+  retryAfterSeconds?: number;
+  constructor(status: number, message: string, retryAfterSeconds?: number) {
     super(message);
     this.status = status;
+    this.retryAfterSeconds = retryAfterSeconds;
   }
 }
 
@@ -61,7 +65,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, { ...init, headers });
   if (!res.ok) {
     const text = await res.text();
-    throw new ApiError(res.status, text || res.statusText);
+    const retryAfter = res.headers.get("Retry-After");
+    throw new ApiError(res.status, text || res.statusText, retryAfter ? Number(retryAfter) : undefined);
   }
   if (res.status === 204) return undefined as T;
   return (await res.json()) as T;

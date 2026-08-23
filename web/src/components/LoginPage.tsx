@@ -18,6 +18,9 @@ export function LoginPage() {
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
         setError("아이디 또는 비밀번호가 올바르지 않거나, 할당된 역할이 없습니다.");
+      } else if (err instanceof ApiError && err.status === 429) {
+        const wait = err.retryAfterSeconds;
+        setError(`로그인 시도가 너무 잦습니다. ${wait ? `${wait}초 후` : "잠시 후"} 다시 시도해주세요.`);
       } else {
         setError("로그인 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.");
       }

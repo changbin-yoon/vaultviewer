@@ -2,7 +2,7 @@
 
 image:
   repository: yoochabi/vaultviewer
-  tag: "0.1.15"
+  tag: "0.1.16"
   pullPolicy: IfNotPresent
 
 imagePullSecrets: []

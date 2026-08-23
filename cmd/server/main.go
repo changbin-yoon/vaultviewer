@@ -70,6 +70,7 @@ func main() {
 	}
 	authenticator := auth.NewLDAPAuthenticator(ldapCfg)
 	sm := auth.NewSessionManager(sessionSecret(), sessionTTL())
+	loginThrottle := auth.NewLoginThrottle()
 
 	mux := http.NewServeMux()
 
@@ -91,16 +92,30 @@ func main() {
 			http.Error(w, "invalid request body", http.StatusBadRequest)
 			return
 		}
+
+		throttleKey := strings.ToLower(strings.TrimSpace(creds.Username))
+		if allowed, wait := loginThrottle.Allow(throttleKey); !allowed {
+			w.Header().Set("Retry-After", strconv.Itoa(int(wait.Seconds())+1))
+			http.Error(w, "too many failed login attempts, try again shortly", http.StatusTooManyRequests)
+			return
+		}
+
 		user, err := authenticator.Authenticate(creds.Username, creds.Password)
 		if err != nil {
 			status := http.StatusUnauthorized
 			if !errors.Is(err, auth.ErrInvalidCredentials) && !errors.Is(err, auth.ErrNoRole) {
+				// An LDAP/network failure isn't the caller's fault — don't
+				// spend part of their backoff budget on it.
 				log.Printf("ldap authenticate error: %v", err)
 				status = http.StatusBadGateway
+			} else {
+				loginThrottle.RecordFailure(throttleKey)
 			}
 			http.Error(w, "authentication failed", status)
 			return
 		}
+		loginThrottle.RecordSuccess(throttleKey)
+
 		token, err := sm.Issue(*user)
 		if err != nil {
 			http.Error(w, "failed to issue session", http.StatusInternalServerError)

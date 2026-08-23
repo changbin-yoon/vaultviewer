@@ -3,6 +3,16 @@
 VaultViewer의 주요 변경 사항을 최신순으로 기록합니다. 버전 번호는 Docker 이미지 태그
 (`yoochabi/vaultviewer:<version>`)이자 Helm 차트의 `appVersion`입니다.
 
+## 0.1.16
+
+- LDAP 로그인 시도 제한 추가 — 계정(아이디)별로 실패할 때마다 대기 시간이
+  1초→2초→4초… 최대 30초까지 늘어나는 capped exponential backoff. 하드
+  락아웃 대신 이 방식을 쓴 이유: 하드 락아웃은 "아이디만 아는" 공격자가
+  일부러 로그인을 틀려서 진짜 사용자를 못 들어오게 막는 DoS 수단이 될 수
+  있는데, 대기 시간에 상한이 있으면 그 문제가 없음. LDAP 서버 자체가
+  응답하지 않는 등 인프라 오류는 실패 횟수에 포함하지 않음(사용자 잘못이
+  아니므로). 15분간 추가 실패가 없으면 카운트 초기화
+
 ## 저장소 관리
 
 - GitHub Actions CI 추가 — push/PR마다 Go `build`/`vet`/`test`/`gofmt` 검사와
