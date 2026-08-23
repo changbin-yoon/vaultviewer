@@ -12,6 +12,12 @@ import { MermaidDiagram } from "./MermaidDiagram";
 // recognize (an XSS precaution) — which silently empties our internal
 // "wikilink:"/"embed:" pseudo-schemes. Allow just those two through
 // unchanged and defer to the default sanitizer for everything else.
+const ACTION_CLASS: Record<string, string> = {
+  create: "tag tag-neutral",
+  update: "tag tag-accent",
+  delete: "tag tag-neutral",
+};
+
 function urlTransform(url: string): string {
   if (url.startsWith("wikilink:") || url.startsWith("embed:")) return url;
   return defaultUrlTransform(url);
@@ -174,7 +180,9 @@ export function MarkdownDocument({ path, onNavigate, onMutate }: Props) {
   const role = session!.role;
   const [content, setContent] = useState<string | null>(null);
   const [siblings, setSiblings] = useState<FileItem[]>([]);
-  const [latest, setLatest] = useState<AuditLog | null>(null);
+  const [history, setHistory] = useState<AuditLog[]>([]);
+  const [showHistory, setShowHistory] = useState(false);
+  const latest = history.length > 0 ? history[history.length - 1] : null;
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
@@ -192,6 +200,7 @@ export function MarkdownDocument({ path, onNavigate, onMutate }: Props) {
   useEffect(() => {
     setEditing(false);
     setConfirmingDelete(false);
+    setShowHistory(false);
     setError(null);
     setContent(null);
     api
@@ -210,8 +219,8 @@ export function MarkdownDocument({ path, onNavigate, onMutate }: Props) {
       .catch(() => setError("문서를 찾을 수 없습니다."));
     api
       .getHistory(path)
-      .then((h) => setLatest(h && h.length > 0 ? h[h.length - 1] : null))
-      .catch(() => setLatest(null));
+      .then((h) => setHistory(h ?? []))
+      .catch(() => setHistory([]));
     api
       .listTree(dir)
       .then((items) => setSiblings((items ?? []).filter((i) => !i.isDir && i.name.endsWith(".md"))))
@@ -367,10 +376,35 @@ export function MarkdownDocument({ path, onNavigate, onMutate }: Props) {
             )}
           </div>
         </div>
-        <div className="mono text-xs text-muted mb-5">
-          /{stripMdExtension(path)}
-          {latest && ` · ${new Date(latest.timestamp).toLocaleString()} · ${latest.user}`}
+        <div className="mono text-xs text-muted mb-2 flex items-center gap-1.5">
+          <span>/{stripMdExtension(path)}</span>
+          {latest && (
+            <>
+              <span>· {new Date(latest.timestamp).toLocaleString()} · {latest.user}</span>
+              <button
+                className="underline decoration-dotted"
+                onClick={() => setShowHistory((v) => !v)}
+              >
+                이력 {history.length}건 {showHistory ? "숨기기" : "보기"}
+              </button>
+            </>
+          )}
         </div>
+
+        {showHistory && history.length > 0 && (
+          <div className="flex flex-col gap-1.5 mb-5 pb-4 border-b border-[var(--color-divider)]">
+            {[...history].reverse().map((h, i) => (
+              <div key={i} className="flex items-center gap-2 text-xs">
+                <span className="mono text-muted" style={{ width: 150, flexShrink: 0 }}>
+                  {new Date(h.timestamp).toLocaleString()}
+                </span>
+                <span className={ACTION_CLASS[h.action] ?? "tag tag-neutral"}>{h.action.toUpperCase()}</span>
+                <span className="mono">{h.user}</span>
+                {h.reason && <span className="text-muted">— {h.reason}</span>}
+              </div>
+            ))}
+          </div>
+        )}
 
         {error && <p className="text-sm mb-4" style={{ color: "#b3432f" }}>{error}</p>}
 
