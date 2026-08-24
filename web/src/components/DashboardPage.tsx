@@ -14,15 +14,33 @@ const ROLE_DESC: Record<Role, string> = {
   view: "읽기 전용",
 };
 
-// 위성 노드 배치 — 항상 4개, 시계 방향 top-left/top-right/bottom-right/bottom-left.
-const SATELLITES: { key: string; label: string; x: number; y: number; live: boolean; sub: string }[] = [
-  { key: "trino", label: "Trino", x: 150, y: 78, live: false, sub: "연동 예정" },
-  { key: "opa", label: "OPA", x: 490, y: 78, live: false, sub: "연동 예정" },
-  { key: "s3", label: "S3 IAM", x: 490, y: 242, live: false, sub: "연동 예정" },
-  { key: "vault", label: "Vault", x: 150, y: 242, live: true, sub: "" }, // sub filled in at render time
+// 위성 노드 목록 — 좌표 없이 이름/기본 상태만. 새 LDAP 연동 서비스가 생기면
+// 이 배열에 한 줄 추가하고 ConnectionDiagram의 live/sub 오버라이드 분기만
+// 더하면 됨 — 좌표는 layoutSatellites가 항상 자동으로 다시 계산함.
+const SATELLITE_DEFS: { key: string; label: string; live: boolean; sub: string }[] = [
+  { key: "trino", label: "Trino", live: false, sub: "연동 예정" },
+  { key: "opa", label: "OPA", live: false, sub: "연동 예정" },
+  { key: "s3", label: "S3 IAM", live: false, sub: "연동 예정" },
+  { key: "vault", label: "Vault", live: true, sub: "" }, // sub filled in at render time
 ];
 
 const CENTER = { x: 320, y: 160 };
+const SATELLITE_RADIUS = { x: 210, y: 100 };
+
+// 위성 N개를 중심 둘레 타원 위에 고르게 배치. N=4일 때는 기존 다이아몬드
+// 배치(좌상/우상/우하/좌하)와 동일한 좌표가 나오도록 시작각을 잡음 — 노드가
+// 늘어나도 뷰박스(640x320) 안에 들어오는 동일한 타원 위에서 각도만 나뉨.
+function layoutSatellites<T extends { key: string }>(defs: T[]): (T & { x: number; y: number })[] {
+  const n = defs.length;
+  const angleStep = 360 / n;
+  const startAngle = 180 + angleStep / 2;
+  return defs.map((d, i) => {
+    const angle = ((startAngle + i * angleStep) * Math.PI) / 180;
+    return { ...d, x: CENTER.x + SATELLITE_RADIUS.x * Math.cos(angle), y: CENTER.y + SATELLITE_RADIUS.y * Math.sin(angle) };
+  });
+}
+
+const SATELLITES = layoutSatellites(SATELLITE_DEFS);
 
 function opaSummary(opa: OpaIntegration): string {
   const grants = opa.grants ?? [];
