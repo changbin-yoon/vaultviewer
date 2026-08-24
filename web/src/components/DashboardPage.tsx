@@ -1,6 +1,6 @@
 import { useEffect, useState, type CSSProperties } from "react";
 import * as api from "../lib/api";
-import type { Config, Role, TrinoIntegration } from "../lib/api";
+import type { Config, OpaIntegration, Role, TrinoIntegration } from "../lib/api";
 
 type View = "dashboard" | "vault" | "graph" | "tags" | "search" | "audit" | "guide" | "settings" | "arch";
 
@@ -24,31 +24,51 @@ const SATELLITES: { key: string; label: string; x: number; y: number; live: bool
 
 const CENTER = { x: 320, y: 160 };
 
+function opaSummary(opa: OpaIntegration): string {
+  const grants = opa.grants ?? [];
+  if (grants.length === 0) return "grants 없음";
+  return grants.map((g) => `${g.team}(${g.role})`).join(", ");
+}
+
 function ConnectionDiagram({
   username,
   vaultSub,
   trino,
+  opa,
 }: {
   username: string;
   vaultSub: string;
   trino: TrinoIntegration;
+  opa: OpaIntegration;
 }) {
   const satellites = SATELLITES.map((s) => {
     if (s.key === "vault") return { ...s, sub: vaultSub };
     if (s.key === "trino" && trino.enabled) {
       return { ...s, live: !!trino.connected, sub: trino.connected ? (trino.role ?? "") : "연결 안 됨" };
     }
+    if (s.key === "opa" && opa.enabled) {
+      return { ...s, live: !!opa.connected, sub: opa.connected ? opaSummary(opa) : "연결 안 됨" };
+    }
     return s;
   });
+
+  // 연결 상태에 따라 aria-label을 동적으로 구성 — "연결된 시스템" / "아직
+  // 연동 예정인 시스템" 목록을 나눠서 문장으로 조립.
+  const connectedNames = [
+    "Vault",
+    trino.enabled && trino.connected ? "Trino" : null,
+    opa.enabled && opa.connected ? "OPA" : null,
+  ].filter((n): n is string => !!n);
+  const plannedNames = ["Trino", "OPA", "S3 IAM"].filter((n) => !connectedNames.includes(n));
 
   return (
     <svg
       className="al-diagram al-diagram-entry"
       viewBox="0 0 640 320"
       role="img"
-      aria-label={`LDAP 계정 ${username}가 Vault${
-        trino.enabled ? (trino.connected ? "와 Trino에는" : "에는") : "에는"
-      } 실제로 연결되어 있고, ${trino.enabled && trino.connected ? "OPA/S3 IAM은" : "Trino/OPA/S3 IAM은"} 아직 연동 예정임을 보여주는 구조도`}
+      aria-label={`LDAP 계정 ${username}가 ${connectedNames.join("/")}에는 실제로 연결되어 있고${
+        plannedNames.length > 0 ? `, ${plannedNames.join("/")}은 아직 연동 예정임` : ""
+      }을 보여주는 구조도`}
     >
       {satellites.map((s, i) => (
         <path
@@ -176,6 +196,49 @@ function TrinoCard({ trino }: { trino: TrinoIntegration }) {
   );
 }
 
+// team/catalogs/operations are read live from OPA's grants document for
+// the caller's mapped LDAP group — not AccessLens config. See internal/opa.
+function OpaCard({ opa }: { opa: OpaIntegration }) {
+  if (!opa.enabled) return <PlannedCard icon="O" name="OPA" />;
+
+  const grants = opa.grants ?? [];
+  const catalogs = [...new Set(grants.flatMap((g) => g.catalogs))];
+  const operations = [...new Set(grants.flatMap((g) => g.operations))];
+
+  return (
+    <div className="al-panel al-perm-card">
+      <div className="al-top">
+        <div className="al-sys">
+          <div className={`al-sys-icon${opa.connected ? "" : " al-planned"}`}>O</div>
+          <div>
+            <h3>OPA</h3>
+            <div className="al-role-line">
+              {grants.length > 0 ? grants.map((g) => `${g.team}(${g.role})`).join(", ") : "grants 없음"}
+            </div>
+          </div>
+        </div>
+        <span className={`al-status-dot${opa.connected ? "" : " al-planned"}`}>
+          {opa.connected ? "연결됨" : "연결 안 됨"}
+        </span>
+      </div>
+      <dl>
+        {catalogs.length > 0 && (
+          <div className="al-row">
+            <dt>카탈로그</dt>
+            <dd>{catalogs.join(", ")}</dd>
+          </div>
+        )}
+        {operations.length > 0 && (
+          <div className="al-row">
+            <dt>허용 작업</dt>
+            <dd>{operations.join(", ")}</dd>
+          </div>
+        )}
+      </dl>
+    </div>
+  );
+}
+
 export function DashboardPage({
   config,
   session,
@@ -187,6 +250,7 @@ export function DashboardPage({
 }) {
   const vaultSub = config ? `${config.mode} 모드` : "";
   const [trino, setTrino] = useState<TrinoIntegration>({ enabled: false });
+  const [opa, setOpa] = useState<OpaIntegration>({ enabled: false });
 
   useEffect(() => {
     let cancelled = false;
@@ -197,15 +261,27 @@ export function DashboardPage({
       })
       .catch(() => {
         // Leave the disabled default — matches "not configured" so the
-        // Trino card falls back to the same placeholder as OPA/S3 IAM.
+        // Trino card falls back to the same placeholder as S3 IAM.
+      });
+    api
+      .getOpaIntegration()
+      .then((data) => {
+        if (!cancelled) setOpa(data);
+      })
+      .catch(() => {
+        // Leave the disabled default — same fallback as above.
       });
     return () => {
       cancelled = true;
     };
   }, []);
 
-  const integratedLabel = trino.enabled ? "Vault · Trino 연동됨" : "Vault 연동됨";
-  const remainingCount = trino.enabled ? 2 : 3;
+  const integratedNames = ["Vault", trino.enabled ? "Trino" : null, opa.enabled ? "OPA" : null].filter(
+    (n): n is string => !!n
+  );
+  const integratedLabel = `${integratedNames.join(" · ")} 연동됨`;
+  const remainingNames = ["Trino", "OPA", "S3 IAM"].filter((n) => !integratedNames.includes(n));
+  const remainingCount = remainingNames.length;
 
   return (
     <div className="al-scope al-page">
@@ -245,15 +321,20 @@ export function DashboardPage({
             )}
           </div>
           <p className="al-caption">
-            이 계정의 역할이 Vault{trino.enabled ? "·Trino" : ""} 권한을 결정합니다.{" "}
-            {trino.enabled ? "OPA/S3 IAM" : "Trino/OPA/S3 IAM"} 연동이 추가되면 같은 계정 하나로 그
-            권한도 함께 보이게 됩니다.
+            이 계정의 역할이 {integratedNames.join("·")} 권한을 결정합니다.
+            {remainingNames.length > 0 && (
+              <>
+                {" "}
+                {remainingNames.join("/")} 연동이 추가되면 같은 계정 하나로 그 권한도 함께 보이게
+                됩니다.
+              </>
+            )}
           </p>
         </div>
 
         <div className="al-panel al-diagram-panel">
           <h2>계정 연결 구조</h2>
-          <ConnectionDiagram username={session.username} vaultSub={vaultSub} trino={trino} />
+          <ConnectionDiagram username={session.username} vaultSub={vaultSub} trino={trino} opa={opa} />
         </div>
       </section>
 
@@ -266,7 +347,7 @@ export function DashboardPage({
 
       <div className="al-perm-grid">
         <TrinoCard trino={trino} />
-        <PlannedCard icon="O" name="OPA" />
+        <OpaCard opa={opa} />
         <PlannedCard icon="S3" name="S3 IAM" />
 
         <div className="al-panel al-perm-card">

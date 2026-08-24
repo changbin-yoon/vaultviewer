@@ -25,6 +25,7 @@ import (
 	"github.com/accesslens/accesslens/internal/backup"
 	"github.com/accesslens/accesslens/internal/model"
 	"github.com/accesslens/accesslens/internal/ontology"
+	"github.com/accesslens/accesslens/internal/opa"
 	"github.com/accesslens/accesslens/internal/storage"
 	"github.com/accesslens/accesslens/internal/storage/git"
 	"github.com/accesslens/accesslens/internal/storage/k8s"
@@ -91,6 +92,11 @@ func main() {
 	// unless ACCESSLENS_TRINO_ENDPOINT (etc.) is set.
 	trinoCfg := trino.LoadConfigFromEnv()
 	trinoClient := trino.NewClient(trinoCfg)
+
+	// Same Dashboard-status-card shape as Trino above. Disabled unless
+	// ACCESSLENS_OPA_ENDPOINT is set.
+	opaCfg := opa.LoadConfigFromEnv()
+	opaClient := opa.NewClient(opaCfg)
 
 	mux := http.NewServeMux()
 
@@ -298,6 +304,31 @@ func main() {
 			"connected": connected,
 			"role":      trinoCfg.RoleMap[user.Role],
 			"catalogs":  trinoCfg.Catalogs,
+		})
+	}))
+
+	// Dashboard status card for OPA — resolves the caller's mapped LDAP
+	// group against OPA's live grants document (see internal/opa). One
+	// step more live than Trino's card: team/catalogs/operations come from
+	// OPA itself, not AccessLens's own Helm values.
+	mux.HandleFunc("/api/opa", auth.RequireAuth(sm, func(w http.ResponseWriter, r *http.Request, user model.User) {
+		w.Header().Set("Content-Type", "application/json")
+		if !opaCfg.Enabled() {
+			json.NewEncoder(w).Encode(map[string]bool{"enabled": false})
+			return
+		}
+		grants, err := opaClient.Resolve(r.Context(), opaCfg.GroupMap[user.Role])
+		if err != nil {
+			json.NewEncoder(w).Encode(map[string]any{"enabled": true, "connected": false})
+			return
+		}
+		if grants == nil {
+			grants = []opa.Grant{} // serialize as `[]`, not `null`, when no group is mapped
+		}
+		json.NewEncoder(w).Encode(map[string]any{
+			"enabled":   true,
+			"connected": true,
+			"grants":    grants,
 		})
 	}))
 

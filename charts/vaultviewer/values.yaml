@@ -3,7 +3,7 @@
 
 image:
   repository: yoochabi/vaultviewer
-  tag: "0.1.38"
+  tag: "0.1.39"
   pullPolicy: IfNotPresent
 
 imagePullSecrets: []
@@ -143,6 +143,21 @@ trino:
     view: "view"
   # 대시보드에 표시할 카탈로그 이름 목록 (Trino에서 라이브 조회하지 않음).
   catalogs: []
+
+# -- OPA 대시보드 카드 (LDAP 그룹 -> grants 라이브 조회) --------------------
+# Trino가 접근 제어에 쓰는 것과 같은 OPA를 그대로 조회 — 팀/카탈로그/허용
+# operation을 여기 Helm values에 다시 적지 않고, OPA의 현재 grants 문서에서
+# 그대로 읽어옴 (internal/opa). endpoint를 비워두면(기본값) 완전히 비활성.
+# 인증 없음 — Trino 자신도 이 OPA를 인증 없이 호출함.
+opa:
+  # 예: "opa.trino-verify.svc.cluster.local:8181". 항상 HTTP로 접속.
+  endpoint: ""
+  # AccessLens 역할(adm/dev/view) -> OPA 쪽 LDAP 그룹 이름. 매핑 안 된
+  # 역할은 조회 결과가 빈 배열(grants 없음)로 정직하게 표시됨.
+  groupMap:
+    adm: ""
+    dev: ""
+    view: ""
 
 # -- Networking --------------------------------------------------------
 service:

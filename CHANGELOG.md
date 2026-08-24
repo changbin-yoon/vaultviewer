@@ -4,6 +4,19 @@ AccessLens(이전 이름: VaultViewer)의 주요 변경 사항을 최신순으�
 번호는 Docker 이미지 태그(`yoochabi/vaultviewer:<version>`)이자 Helm 차트의
 `appVersion`입니다.
 
+## 0.1.39
+
+- 기능 추가: OPA 대시보드 카드 — `internal/opa` 패키지로 OPA의 grants
+  문서(`GET /v1/data/grants`)를 라이브로 조회해, 사용자 역할에 매핑된
+  LDAP 그룹(`opa.groupMap`)의 팀/역할/카탈로그/허용 작업을 그대로 보여줌.
+  Trino 카드(설정값 기반)보다 한 단계 더 라이브함 — team→catalog,
+  role→operations 매핑을 AccessLens Helm values에 다시 적지 않고 OPA
+  자체의 정책 데이터에서 매번 읽어옴. 인증 불필요(Trino 자신도 같은 OPA를
+  인증 없이 호출). `GET /api/opa` 신규 엔드포인트. cluster-mesh1은
+  trino-verify(cluster-mesh2)의 같은 OPA를 재사용 — Trino 접근 제어에
+  실제로 쓰이는 인스턴스와 동일. `opa.endpoint` 미설정 시 기존
+  "연동 예정" 플레이스홀더로 폴백.
+
 ## 0.1.38
 
 - 기능 추가: Trino 대시보드 카드 1단계 — `internal/trino` 패키지로 Trino

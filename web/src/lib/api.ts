@@ -102,6 +102,26 @@ export function getTrinoIntegration() {
   return request<TrinoIntegration>("/api/trino");
 }
 
+// One resolved OPA grant for the caller's mapped LDAP group — team,
+// allowed operations, and catalogs come straight from OPA's live grants
+// document, not AccessLens's own config. See internal/opa on the backend.
+export interface OpaGrant {
+  team: string;
+  role: string;
+  catalogs: string[];
+  operations: string[];
+}
+
+export interface OpaIntegration {
+  enabled: boolean;
+  connected?: boolean;
+  grants?: OpaGrant[];
+}
+
+export function getOpaIntegration() {
+  return request<OpaIntegration>("/api/opa");
+}
+
 // LDAP 그룹 CN -> 화면에 보여줄 팀 이름. 역할 부여(auth.Config의
 // GroupRoleMap)와는 별개로, adm이 설정 화면에서 직접 관리하는 값.
 export function getGroupTeams() {
