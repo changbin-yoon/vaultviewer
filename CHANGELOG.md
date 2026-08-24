@@ -4,6 +4,22 @@ AccessLens(이전 이름: VaultViewer)의 주요 변경 사항을 최신순으�
 번호는 Docker 이미지 태그(`yoochabi/vaultviewer:<version>`)이자 Helm 차트의
 `appVersion`입니다.
 
+## 0.1.43
+
+- 버그 수정: 대시보드 "시스템별 권한" 카드가 목업(`accesslens-mockup`)에서는
+  4개 다 한 줄에 들어가는데 실서비스에서는 3개+1개로 줄바꿈되던 문제.
+  `.al-page`가 `max-width: 1180px`만 갖고 `width`는 지정하지 않아, App.tsx의
+  `flex flex-col` 루트 안에서 실제로는 자기 컨텐츠 크기로 축소돼(약 923px)
+  `.al-perm-grid`의 `repeat(auto-fit, minmax(250px, 1fr))`이 4열 대신 3열로
+  계산됐던 것 — `width: 100%` 추가로 해결.
+- 기능 추가: 대시보드 "계정 연결 구조" 다이어그램에 통신되는 느낌의 흐름
+  애니메이션 — `accesslens-mockup`과 동일한 기법으로, 실제로 연결된
+  (`live`) 트렁크 라인마다 `pathLength="1"`로 정규화한 오버레이 `<path>`
+  하나를 더 그려서 짧은 대시 패턴이 `stroke-dashoffset`로 무한히 흐르게 함
+  (`prefers-reduced-motion`에서는 정지된 반투명 오버레이로 대체). "연동
+  예정" 상태(dashed, 정적)인 링크에는 흐름 효과를 넣지 않아 실제 연결 여부
+  구분은 그대로 유지.
+
 ## 0.1.42
 
 - 기능 추가: 라이트/다크 테마 수동 토글 — `accesslens-mockup` 목업 아티팩트와

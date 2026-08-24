@@ -71,7 +71,12 @@
   margin: 0;
 }
 
-.al-page { max-width: 1180px; margin: 0 auto; }
+/* width:100% is needed alongside max-width — without it, this block sits
+   inside a column-flex ancestor (App.tsx's root flex-col div) and ends up
+   shrink-to-fit sized around its own content instead of stretching to fill
+   the cross axis, which starves .al-perm-grid's auto-fit columns down from
+   4 to 3. */
+.al-page { max-width: 1180px; width: 100%; margin: 0 auto; }
 
 .al-panel {
   background: var(--al-surface);
@@ -129,6 +134,24 @@ svg.al-diagram { width: 100%; height: auto; }
 .al-trunk-live { fill: none; stroke: var(--al-accent); stroke-width: 2; stroke-linecap: round; }
 .al-trunk-planned { fill: none; stroke: var(--al-line); stroke-width: 1.6; stroke-linecap: round; stroke-dasharray: 5 5; }
 
+/* Overlaid on .al-trunk-live only (real connections) — a short dash pattern
+   that slides along the same path forever, reading as packets flowing from
+   the LDAP node out to the service. pathLength="1" on the <path> normalizes
+   dasharray/dashoffset to path-fraction units regardless of actual length. */
+.al-flow {
+  fill: none;
+  stroke: var(--al-surface);
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  stroke-dasharray: 0.05 0.09;
+  opacity: 0;
+}
+.al-diagram-entry .al-flow {
+  animation: al-fadein 0.4s ease forwards, al-flow 2.2s linear infinite;
+  animation-delay: var(--al-delay, 0s), calc(var(--al-delay, 0s) + 0.5s);
+}
+@keyframes al-flow { to { stroke-dashoffset: -1; } }
+
 .al-sat-ring { fill: var(--al-surface); stroke: var(--al-border); stroke-width: 1.5; }
 .al-sat-ring.live { stroke: var(--al-accent); }
 .al-sat-status-live { fill: var(--al-good); }
@@ -153,6 +176,7 @@ svg.al-diagram { width: 100%; height: auto; }
     opacity: 1 !important;
     transform: none !important;
   }
+  .al-diagram-entry .al-flow { opacity: 0.55 !important; }
 }
 
 /* ---------- permission grid ---------- */

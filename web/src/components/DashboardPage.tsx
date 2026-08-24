@@ -85,6 +85,19 @@ function ConnectionDiagram({
         />
       ))}
 
+      {satellites.map(
+        (s, i) =>
+          s.live && (
+            <path
+              key={`flow-${s.key}`}
+              className="al-flow"
+              pathLength="1"
+              d={`M ${CENTER.x} ${CENTER.y} L ${s.x} ${s.y}`}
+              style={{ "--al-delay": `${0.1 + i * 0.12}s` } as DelayStyle}
+            />
+          ),
+      )}
+
       {satellites.map((s, i) => (
         <g key={`sat-${s.key}`}>
           <circle
