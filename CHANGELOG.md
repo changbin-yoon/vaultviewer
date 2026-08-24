@@ -4,6 +4,18 @@ AccessLens(이전 이름: VaultViewer)의 주요 변경 사항을 최신순으�
 번호는 Docker 이미지 태그(`yoochabi/vaultviewer:<version>`)이자 Helm 차트의
 `appVersion`입니다.
 
+## 0.1.38
+
+- 기능 추가: Trino 대시보드 카드 1단계 — `internal/trino` 패키지로 Trino
+  coordinator에 연결 확인(`/v1/info`, Basic Auth)만 라이브로 수행하고,
+  역할/카탈로그는 Helm values(`trino.roleMap`/`trino.catalogs`)로 설정한
+  라벨을 그대로 보여줌(Trino GRANT를 직접 조회하지 않음 — 의도적 범위 제한,
+  다음 단계 후보). `GET /api/trino` 신규 엔드포인트, 프론트 대시보드의
+  Trino 카드와 연결 구조도가 실데이터로 전환. `trino.endpoint` 미설정 시
+  기존 "연동 예정" 플레이스홀더로 완전히 폴백 — Trino 미설정 배포에는
+  영향 없음. cluster-mesh1 배포는 별도 클러스터(cluster-mesh2)의 테스트
+  Trino(`trino-verify` 네임스페이스)를 NodePort로 노출해 연결.
+
 ## 0.1.37
 
 - 리디자인: "문서"(Vault) 화면의 트리 사이드바와 노트 패널을 카드형 레이아웃으로

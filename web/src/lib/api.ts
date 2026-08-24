@@ -89,6 +89,19 @@ export function getConfig() {
   return request<Config>("/api/config");
 }
 
+// A connectivity check + operator-configured role/catalog labels — not a
+// live Trino GRANT lookup. See internal/trino on the backend.
+export interface TrinoIntegration {
+  enabled: boolean;
+  connected?: boolean;
+  role?: string;
+  catalogs?: string[];
+}
+
+export function getTrinoIntegration() {
+  return request<TrinoIntegration>("/api/trino");
+}
+
 // LDAP 그룹 CN -> 화면에 보여줄 팀 이름. 역할 부여(auth.Config의
 // GroupRoleMap)와는 별개로, adm이 설정 화면에서 직접 관리하는 값.
 export function getGroupTeams() {

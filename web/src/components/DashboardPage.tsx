@@ -1,5 +1,6 @@
-import type { CSSProperties } from "react";
-import type { Config, Role } from "../lib/api";
+import { useEffect, useState, type CSSProperties } from "react";
+import * as api from "../lib/api";
+import type { Config, Role, TrinoIntegration } from "../lib/api";
 
 type View = "dashboard" | "vault" | "graph" | "tags" | "search" | "audit" | "guide" | "settings" | "arch";
 
@@ -23,15 +24,31 @@ const SATELLITES: { key: string; label: string; x: number; y: number; live: bool
 
 const CENTER = { x: 320, y: 160 };
 
-function ConnectionDiagram({ username, vaultSub }: { username: string; vaultSub: string }) {
-  const satellites = SATELLITES.map((s) => (s.key === "vault" ? { ...s, sub: vaultSub } : s));
+function ConnectionDiagram({
+  username,
+  vaultSub,
+  trino,
+}: {
+  username: string;
+  vaultSub: string;
+  trino: TrinoIntegration;
+}) {
+  const satellites = SATELLITES.map((s) => {
+    if (s.key === "vault") return { ...s, sub: vaultSub };
+    if (s.key === "trino" && trino.enabled) {
+      return { ...s, live: !!trino.connected, sub: trino.connected ? (trino.role ?? "") : "연결 안 됨" };
+    }
+    return s;
+  });
 
   return (
     <svg
       className="al-diagram al-diagram-entry"
       viewBox="0 0 640 320"
       role="img"
-      aria-label={`LDAP 계정 ${username}가 Vault에는 실제로 연결되어 있고, Trino/OPA/S3 IAM은 아직 연동 예정임을 보여주는 구조도`}
+      aria-label={`LDAP 계정 ${username}가 Vault${
+        trino.enabled ? (trino.connected ? "와 Trino에는" : "에는") : "에는"
+      } 실제로 연결되어 있고, ${trino.enabled && trino.connected ? "OPA/S3 IAM은" : "Trino/OPA/S3 IAM은"} 아직 연동 예정임을 보여주는 구조도`}
     >
       {satellites.map((s, i) => (
         <path
@@ -124,6 +141,41 @@ function PlannedCard({ icon, name }: { icon: string; name: string }) {
   );
 }
 
+// role/catalogs are config-driven (operator-set role/catalog labels), not a
+// live Trino GRANT lookup — only "connected" reflects a real check.
+function TrinoCard({ trino }: { trino: TrinoIntegration }) {
+  if (!trino.enabled) return <PlannedCard icon="T" name="Trino" />;
+
+  return (
+    <div className="al-panel al-perm-card">
+      <div className="al-top">
+        <div className="al-sys">
+          <div className={`al-sys-icon${trino.connected ? "" : " al-planned"}`}>T</div>
+          <div>
+            <h3>Trino</h3>
+            <div className="al-role-line">RBAC: {trino.role}</div>
+          </div>
+        </div>
+        <span className={`al-status-dot${trino.connected ? "" : " al-planned"}`}>
+          {trino.connected ? "연결됨" : "연결 안 됨"}
+        </span>
+      </div>
+      <dl>
+        <div className="al-row">
+          <dt>역할</dt>
+          <dd>{trino.role}</dd>
+        </div>
+        {trino.catalogs && trino.catalogs.length > 0 && (
+          <div className="al-row">
+            <dt>카탈로그</dt>
+            <dd>{trino.catalogs.join(", ")}</dd>
+          </div>
+        )}
+      </dl>
+    </div>
+  );
+}
+
 export function DashboardPage({
   config,
   session,
@@ -134,6 +186,26 @@ export function DashboardPage({
   onNavigateView: (v: View) => void;
 }) {
   const vaultSub = config ? `${config.mode} 모드` : "";
+  const [trino, setTrino] = useState<TrinoIntegration>({ enabled: false });
+
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .getTrinoIntegration()
+      .then((data) => {
+        if (!cancelled) setTrino(data);
+      })
+      .catch(() => {
+        // Leave the disabled default — matches "not configured" so the
+        // Trino card falls back to the same placeholder as OPA/S3 IAM.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const integratedLabel = trino.enabled ? "Vault · Trino 연동됨" : "Vault 연동됨";
+  const remainingCount = trino.enabled ? 2 : 3;
 
   return (
     <div className="al-scope al-page">
@@ -173,24 +245,27 @@ export function DashboardPage({
             )}
           </div>
           <p className="al-caption">
-            이 LDAP 계정의 그룹이 Vault 권한을 결정합니다. Trino/OPA/S3 IAM 연동이 추가되면 같은
-            계정 하나로 그 권한도 함께 보이게 됩니다.
+            이 계정의 역할이 Vault{trino.enabled ? "·Trino" : ""} 권한을 결정합니다.{" "}
+            {trino.enabled ? "OPA/S3 IAM" : "Trino/OPA/S3 IAM"} 연동이 추가되면 같은 계정 하나로 그
+            권한도 함께 보이게 됩니다.
           </p>
         </div>
 
         <div className="al-panel al-diagram-panel">
           <h2>계정 연결 구조</h2>
-          <ConnectionDiagram username={session.username} vaultSub={vaultSub} />
+          <ConnectionDiagram username={session.username} vaultSub={vaultSub} trino={trino} />
         </div>
       </section>
 
       <div className="al-section-head">
         <h2>시스템별 권한</h2>
-        <span className="al-note">Vault 연동됨 · 3개 시스템 연동 예정</span>
+        <span className="al-note">
+          {integratedLabel} · {remainingCount}개 시스템 연동 예정
+        </span>
       </div>
 
       <div className="al-perm-grid">
-        <PlannedCard icon="T" name="Trino" />
+        <TrinoCard trino={trino} />
         <PlannedCard icon="O" name="OPA" />
         <PlannedCard icon="S3" name="S3 IAM" />
 

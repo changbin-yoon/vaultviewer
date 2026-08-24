@@ -30,6 +30,7 @@ import (
 	"github.com/accesslens/accesslens/internal/storage/k8s"
 	"github.com/accesslens/accesslens/internal/storage/local"
 	"github.com/accesslens/accesslens/internal/teams"
+	"github.com/accesslens/accesslens/internal/trino"
 )
 
 func main() {
@@ -84,6 +85,12 @@ func main() {
 	authenticator := auth.NewLDAPAuthenticator(ldapCfg, teamsStore)
 	sm := auth.NewSessionManager(sessionSecret(), sessionTTL())
 	loginThrottle := auth.NewLoginThrottle()
+
+	// Independent of storage mode (unlike S3 backup above) — a Dashboard
+	// status card, not tied to how/where vault data is stored. Disabled
+	// unless ACCESSLENS_TRINO_ENDPOINT (etc.) is set.
+	trinoCfg := trino.LoadConfigFromEnv()
+	trinoClient := trino.NewClient(trinoCfg)
 
 	mux := http.NewServeMux()
 
@@ -269,6 +276,28 @@ func main() {
 			"username":   user.Username,
 			"role":       string(user.Role),
 			"department": user.Department,
+		})
+	}))
+
+	// Dashboard status card for Trino — a connectivity check plus the
+	// operator-configured role/catalog labels (not a live GRANT lookup, see
+	// internal/trino). Always returns 200; "enabled: false" is how the
+	// frontend tells "not configured" apart from "configured but down".
+	mux.HandleFunc("/api/trino", auth.RequireAuth(sm, func(w http.ResponseWriter, r *http.Request, user model.User) {
+		w.Header().Set("Content-Type", "application/json")
+		if !trinoCfg.Enabled() {
+			json.NewEncoder(w).Encode(map[string]bool{"enabled": false})
+			return
+		}
+		connected, err := trinoClient.CheckConnection(r.Context())
+		if err != nil {
+			connected = false
+		}
+		json.NewEncoder(w).Encode(map[string]any{
+			"enabled":   true,
+			"connected": connected,
+			"role":      trinoCfg.RoleMap[user.Role],
+			"catalogs":  trinoCfg.Catalogs,
 		})
 	}))
 

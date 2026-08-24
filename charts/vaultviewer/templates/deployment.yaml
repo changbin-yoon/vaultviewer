@@ -133,6 +133,28 @@ spec:
                   name: {{ .Values.backup.existingSecret }}
                   key: {{ .Values.backup.existingSecretSecretKeyKey }}
             {{- end }}
+            {{- if .Values.trino.endpoint }}
+            - name: ACCESSLENS_TRINO_ENDPOINT
+              value: {{ .Values.trino.endpoint | quote }}
+            - name: ACCESSLENS_TRINO_INSECURE_SKIP_VERIFY
+              value: {{ .Values.trino.insecureSkipVerify | quote }}
+            - name: ACCESSLENS_TRINO_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.trino.existingSecret | required "trino.existingSecret is required when trino.endpoint is set" }}
+                  key: {{ .Values.trino.existingSecretUsernameKey }}
+            - name: ACCESSLENS_TRINO_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.trino.existingSecret }}
+                  key: {{ .Values.trino.existingSecretPasswordKey }}
+            {{- range $role, $label := .Values.trino.roleMap }}
+            - name: {{ printf "ACCESSLENS_TRINO_ROLE_%s" ($role | upper) }}
+              value: {{ $label | quote }}
+            {{- end }}
+            - name: ACCESSLENS_TRINO_CATALOGS
+              value: {{ join "," .Values.trino.catalogs | quote }}
+            {{- end }}
           {{- if and (eq .Values.mode "local") .Values.local.persistence.enabled }}
           volumeMounts:
             - name: data

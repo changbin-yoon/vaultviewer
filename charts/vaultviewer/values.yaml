@@ -3,7 +3,7 @@
 
 image:
   repository: yoochabi/vaultviewer
-  tag: "0.1.37"
+  tag: "0.1.38"
   pullPolicy: IfNotPresent
 
 imagePullSecrets: []
@@ -118,6 +118,31 @@ backup:
   existingSecret: ""
   existingSecretAccessKeyKey: "access-key"
   existingSecretSecretKeyKey: "secret-key"
+
+# -- Trino 대시보드 카드 (연결 확인 + 역할/카탈로그 표시) -------------------
+# 스토리지 모드와 무관하게 동작하는 순수 상태 카드 — Trino의 GRANT를 직접
+# 조회하지 않고, 여기서 설정한 role/catalog 라벨을 그대로 보여줌. endpoint를
+# 비워두면(기본값) 완전히 비활성 — 대시보드는 기존 "연동 예정" 카드를 보여줌.
+trino:
+  # coordinator host:port, 예: "trino.example.svc.cluster.local:8443".
+  # 항상 HTTPS로 접속함 (Trino PASSWORD 인증은 평문 HTTP를 기본 거부).
+  endpoint: ""
+  # coordinator가 자체 서명 인증서를 쓰면 true — 알려진 테스트/내부
+  # 환경에서만 켤 것.
+  insecureSkipVerify: false
+  # Username/Password는 여기 직접 쓰지 말고 미리 Secret으로 만들어서
+  # existingSecret으로 참조할 것 (ldap.existingSecret과 동일한 패턴).
+  existingSecret: ""
+  existingSecretUsernameKey: "username"
+  existingSecretPasswordKey: "password"
+  # AccessLens 역할(adm/dev/view) -> 대시보드에 보여줄 Trino 역할 라벨.
+  # 기본값은 그대로 재사용(추가 설정 없이 바로 동작).
+  roleMap:
+    adm: "adm"
+    dev: "dev"
+    view: "view"
+  # 대시보드에 표시할 카탈로그 이름 목록 (Trino에서 라이브 조회하지 않음).
+  catalogs: []
 
 # -- Networking --------------------------------------------------------
 service:
