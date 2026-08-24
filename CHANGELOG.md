@@ -4,6 +4,13 @@ AccessLens(이전 이름: VaultViewer)의 주요 변경 사항을 최신순으�
 번호는 Docker 이미지 태그(`yoochabi/vaultviewer:<version>`)이자 Helm 차트의
 `appVersion`입니다.
 
+## 0.1.37
+
+- 리디자인: "문서"(Vault) 화면의 트리 사이드바와 노트 패널을 카드형 레이아웃으로
+  재구성 — 각각 둥근 모서리·그림자가 있는 흰 카드로 페이지 배경 위에 띄우고
+  카드 사이 여백을 추가. 기존 flush 분할선 레이아웃은 제거. 기능/데이터 흐름
+  변경 없음.
+
 ## 0.1.36
 
 - 제품명을 VaultViewer에서 AccessLens로 변경 — Go 모듈 경로

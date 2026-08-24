@@ -58,9 +58,12 @@ function Shell() {
       {view === "dashboard" && <DashboardPage config={config} session={session} onNavigateView={setView} />}
       {view === "arch" && <ArchPage />}
       {view === "vault" && (
-        <div className="grid grow" style={{ gridTemplateColumns: sidebarCollapsed ? "36px 1fr" : "264px 1fr" }}>
+        <div
+          className="grid grow gap-5 p-5"
+          style={{ gridTemplateColumns: sidebarCollapsed ? "56px 1fr" : "280px 1fr", minHeight: 0 }}
+        >
           {sidebarCollapsed ? (
-            <div className="border-r border-[var(--color-divider)] flex flex-col items-center pt-4">
+            <div className="card flex flex-col items-center pt-4">
               <button
                 className="btn btn-ghost"
                 style={{ fontSize: 14, lineHeight: 1, padding: "4px 6px" }}
@@ -71,14 +74,18 @@ function Shell() {
               </button>
             </div>
           ) : (
-            <Tree
-              selectedPath={selectedPath}
-              onSelect={setSelectedPath}
-              onCollapse={() => setSidebarCollapsed(true)}
-              refreshSignal={vaultVersion}
-            />
+            <div className="card overflow-hidden" style={{ minHeight: 0 }}>
+              <Tree
+                selectedPath={selectedPath}
+                onSelect={setSelectedPath}
+                onCollapse={() => setSidebarCollapsed(true)}
+                refreshSignal={vaultVersion}
+              />
+            </div>
           )}
-          <SecretPanel selectedPath={selectedPath} onNavigate={setSelectedPath} onMutate={bumpVaultVersion} />
+          <div className="card overflow-y-auto" style={{ minHeight: 0 }}>
+            <SecretPanel selectedPath={selectedPath} onNavigate={setSelectedPath} onMutate={bumpVaultVersion} />
+          </div>
         </div>
       )}
       {view === "graph" && (

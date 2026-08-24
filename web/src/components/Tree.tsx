@@ -140,7 +140,7 @@ export function Tree({
   }
 
   return (
-    <nav className="border-r border-[var(--color-divider)] py-4 text-[13.5px] overflow-y-auto">
+    <nav className="h-full py-4 text-[13.5px] overflow-y-auto">
       <div className="flex items-center justify-between px-5 pb-2.5">
         <span className="text-[10px] tracking-[.12em] uppercase text-muted">네임스페이스</span>
         <div className="flex items-center gap-2">
