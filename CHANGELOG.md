@@ -4,6 +4,19 @@ AccessLens(이전 이름: VaultViewer)의 주요 변경 사항을 최신순으�
 번호는 Docker 이미지 태그(`yoochabi/vaultviewer:<version>`)이자 Helm 차트의
 `appVersion`입니다.
 
+## 0.1.41
+
+- 기능 추가: S3 IAM 대시보드 카드 — `internal/s3iam` 패키지로 S3 호환
+  엔드포인트(MinIO)에 고정 LDAP 서비스 계정으로
+  `AssumeRoleWithLDAPIdentity`를 호출해 연결 여부만 라이브로 확인. Trino
+  카드와 동일한 패턴 — 역할/버킷 라벨은 Helm values(`s3iam.roleMap`/
+  `s3iam.buckets`)로 설정, 실 버킷 정책 조회는 아님. `GET /api/s3iam`
+  신규 엔드포인트. `s3iam.endpoint` 미설정 시 기존 "연동 예정"
+  플레이스홀더로 폴백. 이제 대시보드의 Trino/OPA/S3 IAM 세 카드가 모두
+  실동작.
+- cluster-mesh2 MinIO에 팀 기반 IAM 정책 9종(bi/ml/ops × view/dev/adm)
+  등록·검증 — `policy/` 디렉터리에 생성 스크립트와 정책 JSON 보관.
+
 ## 0.1.40
 
 - 버그 수정: 대시보드 권한 카드에서 라벨이 길면(예: "허용 작업") 좁은 열 안에서

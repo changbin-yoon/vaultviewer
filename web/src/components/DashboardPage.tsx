@@ -1,6 +1,6 @@
 import { useEffect, useState, type CSSProperties } from "react";
 import * as api from "../lib/api";
-import type { Config, OpaIntegration, Role, TrinoIntegration } from "../lib/api";
+import type { Config, OpaIntegration, Role, S3IamIntegration, TrinoIntegration } from "../lib/api";
 
 type View = "dashboard" | "vault" | "graph" | "tags" | "search" | "audit" | "guide" | "settings" | "arch";
 
@@ -35,11 +35,13 @@ function ConnectionDiagram({
   vaultSub,
   trino,
   opa,
+  s3iam,
 }: {
   username: string;
   vaultSub: string;
   trino: TrinoIntegration;
   opa: OpaIntegration;
+  s3iam: S3IamIntegration;
 }) {
   const satellites = SATELLITES.map((s) => {
     if (s.key === "vault") return { ...s, sub: vaultSub };
@@ -48,6 +50,9 @@ function ConnectionDiagram({
     }
     if (s.key === "opa" && opa.enabled) {
       return { ...s, live: !!opa.connected, sub: opa.connected ? opaSummary(opa) : "연결 안 됨" };
+    }
+    if (s.key === "s3" && s3iam.enabled) {
+      return { ...s, live: !!s3iam.connected, sub: s3iam.connected ? (s3iam.role ?? "") : "연결 안 됨" };
     }
     return s;
   });
@@ -58,6 +63,7 @@ function ConnectionDiagram({
     "Vault",
     trino.enabled && trino.connected ? "Trino" : null,
     opa.enabled && opa.connected ? "OPA" : null,
+    s3iam.enabled && s3iam.connected ? "S3 IAM" : null,
   ].filter((n): n is string => !!n);
   const plannedNames = ["Trino", "OPA", "S3 IAM"].filter((n) => !connectedNames.includes(n));
 
@@ -239,6 +245,42 @@ function OpaCard({ opa }: { opa: OpaIntegration }) {
   );
 }
 
+// role/buckets are config-driven (operator-set labels), not a live bucket
+// policy lookup — only "connected" reflects a real AssumeRoleWithLDAPIdentity
+// check against the S3 endpoint. See internal/s3iam.
+function S3IamCard({ s3iam }: { s3iam: S3IamIntegration }) {
+  if (!s3iam.enabled) return <PlannedCard icon="S3" name="S3 IAM" />;
+
+  return (
+    <div className="al-panel al-perm-card">
+      <div className="al-top">
+        <div className="al-sys">
+          <div className={`al-sys-icon${s3iam.connected ? "" : " al-planned"}`}>S3</div>
+          <div>
+            <h3>S3 IAM</h3>
+            <div className="al-role-line">RBAC: {s3iam.role}</div>
+          </div>
+        </div>
+        <span className={`al-status-dot${s3iam.connected ? "" : " al-planned"}`}>
+          {s3iam.connected ? "연결됨" : "연결 안 됨"}
+        </span>
+      </div>
+      <dl>
+        <div className="al-row">
+          <dt>역할</dt>
+          <dd>{s3iam.role}</dd>
+        </div>
+        {s3iam.buckets && s3iam.buckets.length > 0 && (
+          <div className="al-row">
+            <dt>버킷</dt>
+            <dd>{s3iam.buckets.join(", ")}</dd>
+          </div>
+        )}
+      </dl>
+    </div>
+  );
+}
+
 export function DashboardPage({
   config,
   session,
@@ -251,6 +293,7 @@ export function DashboardPage({
   const vaultSub = config ? `${config.mode} 모드` : "";
   const [trino, setTrino] = useState<TrinoIntegration>({ enabled: false });
   const [opa, setOpa] = useState<OpaIntegration>({ enabled: false });
+  const [s3iam, setS3iam] = useState<S3IamIntegration>({ enabled: false });
 
   useEffect(() => {
     let cancelled = false;
@@ -261,7 +304,7 @@ export function DashboardPage({
       })
       .catch(() => {
         // Leave the disabled default — matches "not configured" so the
-        // Trino card falls back to the same placeholder as S3 IAM.
+        // Trino card falls back to the same placeholder as the others.
       });
     api
       .getOpaIntegration()
@@ -271,14 +314,25 @@ export function DashboardPage({
       .catch(() => {
         // Leave the disabled default — same fallback as above.
       });
+    api
+      .getS3IamIntegration()
+      .then((data) => {
+        if (!cancelled) setS3iam(data);
+      })
+      .catch(() => {
+        // Leave the disabled default — same fallback as above.
+      });
     return () => {
       cancelled = true;
     };
   }, []);
 
-  const integratedNames = ["Vault", trino.enabled ? "Trino" : null, opa.enabled ? "OPA" : null].filter(
-    (n): n is string => !!n
-  );
+  const integratedNames = [
+    "Vault",
+    trino.enabled ? "Trino" : null,
+    opa.enabled ? "OPA" : null,
+    s3iam.enabled ? "S3 IAM" : null,
+  ].filter((n): n is string => !!n);
   const integratedLabel = `${integratedNames.join(" · ")} 연동됨`;
   const remainingNames = ["Trino", "OPA", "S3 IAM"].filter((n) => !integratedNames.includes(n));
   const remainingCount = remainingNames.length;
@@ -334,7 +388,7 @@ export function DashboardPage({
 
         <div className="al-panel al-diagram-panel">
           <h2>계정 연결 구조</h2>
-          <ConnectionDiagram username={session.username} vaultSub={vaultSub} trino={trino} opa={opa} />
+          <ConnectionDiagram username={session.username} vaultSub={vaultSub} trino={trino} opa={opa} s3iam={s3iam} />
         </div>
       </section>
 
@@ -348,7 +402,7 @@ export function DashboardPage({
       <div className="al-perm-grid">
         <TrinoCard trino={trino} />
         <OpaCard opa={opa} />
-        <PlannedCard icon="S3" name="S3 IAM" />
+        <S3IamCard s3iam={s3iam} />
 
         <div className="al-panel al-perm-card">
           <div className="al-top">

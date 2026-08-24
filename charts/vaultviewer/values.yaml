@@ -3,7 +3,7 @@
 
 image:
   repository: yoochabi/vaultviewer
-  tag: "0.1.40"
+  tag: "0.1.41"
   pullPolicy: IfNotPresent
 
 imagePullSecrets: []
@@ -158,6 +158,29 @@ opa:
     adm: ""
     dev: ""
     view: ""
+
+# -- S3 IAM 대시보드 카드 (LDAP 서비스 계정으로 연결 확인) -------------------
+# S3 호환 엔드포인트(MinIO 등)의 LDAP 아이덴티티 공급자에 고정 서비스
+# 계정으로 AssumeRoleWithLDAPIdentity를 호출해 연결만 확인 — Trino 카드와
+# 같은 패턴(role/bucket은 실 정책 조회가 아니라 여기 설정한 라벨). endpoint를
+# 비워두면(기본값) 완전히 비활성.
+s3iam:
+  # S3 API host:port, 예: "minio.example.svc.cluster.local:9000". 항상
+  # HTTP로 접속 (TLS 없는 배포 기준).
+  endpoint: ""
+  # LDAP 서비스 계정 — 여기 직접 쓰지 말고 미리 Secret으로 만들어서
+  # existingSecret으로 참조할 것 (ldap.existingSecret과 동일한 패턴).
+  existingSecret: ""
+  existingSecretUsernameKey: "ldapUsername"
+  existingSecretPasswordKey: "ldapPassword"
+  # AccessLens 역할(adm/dev/view) -> 대시보드에 보여줄 라벨. 기본값은 그대로
+  # 재사용(추가 설정 없이 바로 동작).
+  roleMap:
+    adm: "adm"
+    dev: "dev"
+    view: "view"
+  # 대시보드에 표시할 버킷 이름 목록 (S3에서 라이브 조회하지 않음).
+  buckets: []
 
 # -- Networking --------------------------------------------------------
 service:

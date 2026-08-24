@@ -163,6 +163,26 @@ spec:
               value: {{ $group | quote }}
             {{- end }}
             {{- end }}
+            {{- if .Values.s3iam.endpoint }}
+            - name: ACCESSLENS_S3IAM_ENDPOINT
+              value: {{ .Values.s3iam.endpoint | quote }}
+            - name: ACCESSLENS_S3IAM_LDAP_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.s3iam.existingSecret | required "s3iam.existingSecret is required when s3iam.endpoint is set" }}
+                  key: {{ .Values.s3iam.existingSecretUsernameKey }}
+            - name: ACCESSLENS_S3IAM_LDAP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.s3iam.existingSecret }}
+                  key: {{ .Values.s3iam.existingSecretPasswordKey }}
+            {{- range $role, $label := .Values.s3iam.roleMap }}
+            - name: {{ printf "ACCESSLENS_S3IAM_ROLE_%s" ($role | upper) }}
+              value: {{ $label | quote }}
+            {{- end }}
+            - name: ACCESSLENS_S3IAM_BUCKETS
+              value: {{ join "," .Values.s3iam.buckets | quote }}
+            {{- end }}
           {{- if and (eq .Values.mode "local") .Values.local.persistence.enabled }}
           volumeMounts:
             - name: data

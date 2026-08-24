@@ -122,6 +122,20 @@ export function getOpaIntegration() {
   return request<OpaIntegration>("/api/opa");
 }
 
+// A connectivity check (fixed LDAP service account) + operator-configured
+// role/bucket labels — not a live bucket-policy lookup. See internal/s3iam
+// on the backend.
+export interface S3IamIntegration {
+  enabled: boolean;
+  connected?: boolean;
+  role?: string;
+  buckets?: string[];
+}
+
+export function getS3IamIntegration() {
+  return request<S3IamIntegration>("/api/s3iam");
+}
+
 // LDAP 그룹 CN -> 화면에 보여줄 팀 이름. 역할 부여(auth.Config의
 // GroupRoleMap)와는 별개로, adm이 설정 화면에서 직접 관리하는 값.
 export function getGroupTeams() {

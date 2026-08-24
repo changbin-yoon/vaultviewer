@@ -26,6 +26,7 @@ import (
 	"github.com/accesslens/accesslens/internal/model"
 	"github.com/accesslens/accesslens/internal/ontology"
 	"github.com/accesslens/accesslens/internal/opa"
+	"github.com/accesslens/accesslens/internal/s3iam"
 	"github.com/accesslens/accesslens/internal/storage"
 	"github.com/accesslens/accesslens/internal/storage/git"
 	"github.com/accesslens/accesslens/internal/storage/k8s"
@@ -97,6 +98,12 @@ func main() {
 	// ACCESSLENS_OPA_ENDPOINT is set.
 	opaCfg := opa.LoadConfigFromEnv()
 	opaClient := opa.NewClient(opaCfg)
+
+	// Same shape again — connectivity check via a fixed LDAP service
+	// account, config-driven role/bucket labels. Disabled unless
+	// ACCESSLENS_S3IAM_ENDPOINT is set.
+	s3iamCfg := s3iam.LoadConfigFromEnv()
+	s3iamClient := s3iam.NewClient(s3iamCfg)
 
 	mux := http.NewServeMux()
 
@@ -329,6 +336,28 @@ func main() {
 			"enabled":   true,
 			"connected": true,
 			"grants":    grants,
+		})
+	}))
+
+	// Dashboard status card for S3 IAM — a connectivity check (does the
+	// fixed LDAP service account still successfully AssumeRoleWithLDAPIdentity
+	// against the S3 endpoint) plus operator-configured role/bucket labels,
+	// same shape as Trino's card (see internal/s3iam).
+	mux.HandleFunc("/api/s3iam", auth.RequireAuth(sm, func(w http.ResponseWriter, r *http.Request, user model.User) {
+		w.Header().Set("Content-Type", "application/json")
+		if !s3iamCfg.Enabled() {
+			json.NewEncoder(w).Encode(map[string]bool{"enabled": false})
+			return
+		}
+		connected, err := s3iamClient.CheckConnection(r.Context())
+		if err != nil {
+			connected = false
+		}
+		json.NewEncoder(w).Encode(map[string]any{
+			"enabled":   true,
+			"connected": connected,
+			"role":      s3iamCfg.RoleMap[user.Role],
+			"buckets":   s3iamCfg.Buckets,
 		})
 	}))
 
