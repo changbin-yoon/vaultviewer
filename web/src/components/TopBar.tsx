@@ -1,6 +1,8 @@
+import { useState } from "react";
 import { useAuth } from "../lib/auth";
 import { RoleTag } from "./RoleTag";
 import type { Config } from "../lib/api";
+import { applyTheme, getInitialTheme, storeTheme, type Theme } from "../lib/theme";
 
 type View = "dashboard" | "vault" | "graph" | "tags" | "search" | "audit" | "guide" | "settings" | "arch";
 
@@ -26,8 +28,16 @@ export function TopBar({
   onNavigateView: (v: View) => void;
 }) {
   const { session, logout } = useAuth();
+  const [theme, setTheme] = useState<Theme>(() => getInitialTheme());
   if (!session) return null;
   const isAdmin = session.role === "adm";
+
+  function toggleTheme() {
+    const next: Theme = theme === "dark" ? "light" : "dark";
+    applyTheme(next);
+    storeTheme(next);
+    setTheme(next);
+  }
 
   return (
     <div className="flex items-center gap-4.5 px-5.5 py-3 border-b border-[var(--color-divider)] overflow-x-auto whitespace-nowrap">
@@ -57,6 +67,14 @@ export function TopBar({
       </nav>
 
       <div className="ml-auto flex items-center gap-2.5">
+        <button
+          className="btn btn-secondary mono text-xs"
+          type="button"
+          onClick={toggleTheme}
+          title={theme === "dark" ? "라이트 모드로 전환" : "다크 모드로 전환"}
+        >
+          {theme === "dark" ? "☀ 라이트" : "☾ 다크"}
+        </button>
         <span className="text-[11px] text-muted">역할</span>
         <RoleTag role={session.role} />
         {session.department && <span className="text-sm text-muted">{session.department}</span>}

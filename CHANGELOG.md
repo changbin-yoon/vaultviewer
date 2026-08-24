@@ -4,6 +4,17 @@ AccessLens(이전 이름: VaultViewer)의 주요 변경 사항을 최신순으�
 번호는 Docker 이미지 태그(`yoochabi/vaultviewer:<version>`)이자 Helm 차트의
 `appVersion`입니다.
 
+## 0.1.42
+
+- 기능 추가: 라이트/다크 테마 수동 토글 — `accesslens-mockup` 목업 아티팩트와
+  동일하게 실서비스 프론트엔드에도 적용. `lib/theme.ts`(localStorage 키
+  `accesslens_theme`, `<html data-theme>` 속성 기반)와 상단바(`TopBar`)의
+  토글 버튼 추가. `index.css`(앱 전체 디자인 토큰)와
+  `accesslens-dashboard.css`(대시보드/구성도 스코프 토큰)가 같은
+  `[data-theme]` 속성을 공유하도록 3단계 오버라이드 패턴(기본 라이트 →
+  `prefers-color-scheme` 다크 → 명시적 `[data-theme]`)으로 통일 — 기존에는
+  대시보드/구성도 페이지만 OS 설정을 따라갔고 수동 토글이 없었음.
+
 ## 0.1.41
 
 - 기능 추가: S3 IAM 대시보드 카드 — `internal/s3iam` 패키지로 S3 호환

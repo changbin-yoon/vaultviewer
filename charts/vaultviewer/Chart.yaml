@@ -2,5 +2,5 @@ apiVersion: v2
 name: vaultviewer
 description: LDAP 기반 RBAC를 지원하는 AccessLens 시크릿/권한 뷰어 (로컬 파일 모드 & 쿠버네티스 클러스터 모드)
 type: application
-version: 0.2.17
-appVersion: "0.1.41"
+version: 0.2.18
+appVersion: "0.1.42"
