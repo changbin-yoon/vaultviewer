@@ -59,6 +59,43 @@ cp charts/vaultviewer/values-example.yaml my-values.yaml
 helm install vaultviewer charts/vaultviewer -f my-values.yaml
 ```
 
+## Airgapped 클러스터에 배포하기
+
+프론트엔드가 Google Fonts를 원격에서 받아오던 부분은 빌드 시점에 내려받아
+`web/public/fonts/`에 넣어두는 방식으로 바꿔서, 배포된 앱 자체는 런타임에
+외부로 나가는 요청이 없습니다(백엔드도 LDAP/Trino/OPA/S3 IAM 등 설정된 내부
+서비스만 호출). 남은 건 이미지 하나뿐 — Docker Hub 접근이 되는 머신에서
+받아서 airgapped 클러스터가 실제로 pull할 수 있는 곳(내부 프라이빗
+레지스트리)에 올려주면 됩니다.
+
+```bash
+# 1) 인터넷이 되는 머신에서 이미지를 받아 tar로 저장
+docker pull yoochabi/vaultviewer:<tag>
+docker save yoochabi/vaultviewer:<tag> -o vaultviewer-<tag>.tar
+
+# 2) tar를 airgapped 환경으로 옮긴 뒤, 그 안에서 불러와 내부 레지스트리로 push
+docker load -i vaultviewer-<tag>.tar
+docker tag yoochabi/vaultviewer:<tag> <내부-레지스트리>/yoochabi/vaultviewer:<tag>
+docker push <내부-레지스트리>/yoochabi/vaultviewer:<tag>
+```
+
+그다음 `image.registry`만 내부 레지스트리로 지정하면 됩니다(레지스트리가
+인증을 요구하면 `imagePullSecrets`도 함께):
+
+```yaml
+image:
+  registry: "<내부-레지스트리>"   # 예: harbor.internal:5000
+  repository: yoochabi/vaultviewer
+  tag: "<tag>"
+
+imagePullSecrets:
+  - name: my-registry-secret
+```
+
+`helm package charts/vaultviewer`로 차트 자체도 `.tgz`로 묶어서 함께 옮길 수
+있습니다 — 이 차트는 하위 차트(`Chart.yaml` dependencies)가 없어서 별도
+`helm dependency build` 없이 그대로 옮겨 쓰면 됩니다.
+
 ## 예제 데이터로 시작하기 (local 모드)
 
 빈 볼트로 시작하면 아무것도 안 보입니다. `examples/vault-seed/`에 콜아웃·표·

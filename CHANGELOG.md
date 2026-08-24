@@ -4,6 +4,31 @@ AccessLens(이전 이름: VaultViewer)의 주요 변경 사항을 최신순으�
 번호는 Docker 이미지 태그(`yoochabi/vaultviewer:<version>`)이자 Helm 차트의
 `appVersion`입니다.
 
+## 0.1.45
+
+- 기능 추가: airgapped 클러스터 배포 지원.
+  - 프론트엔드가 런타임에 fonts.googleapis.com/fonts.gstatic.com을 호출하던
+    부분(Manrope/IBM Plex Sans/IBM Plex Mono, latin+latin-ext 서브셋)을
+    빌드 시점에 받아서 `web/public/fonts/`에 vendor — 배포된 앱은 이제
+    브라우저 쪽에서도 외부 네트워크 호출이 전혀 없음(백엔드는 원래도 설정된
+    내부 서비스만 호출). Noto Sans KR은 원격 요청을 없애고 OS 자체 CJK
+    폰트 자동 대체에 맡김(브라우저의 표준 글리프 폴백 동작이라 기능
+    저하 없음).
+  - Helm 차트에 `image.registry` 필드 추가 — 비워두면 기존처럼 Docker
+    Hub(`image.repository`)를 그대로 쓰고, 채우면
+    `<registry>/<repository>:<tag>`로 이미지를 참조. airgapped 클러스터의
+    내부 프라이빗 레지스트리를 가리키는 용도.
+  - `charts/vaultviewer/README.md`에 "Airgapped 클러스터에 배포하기" 절
+    추가 — 인터넷 되는 머신에서 이미지 pull → save → 내부 환경에서 load →
+    내부 레지스트리로 push → `image.registry` 지정까지의 절차.
+- 리팩터: 시스템 구성도(`구성도` 탭)를 최신화 — Trino/OPA/S3 IAM을 더 이상
+  고정 "연동 예정"(점선)으로 보여주지 않고, 대시보드와 같은 API(`GET
+  /api/trino`·`/api/opa`·`/api/s3iam`)로 실제 연결 상태를 조회해 실선/
+  점선과 "연결됨"/"연결 안 됨"/"연동 예정" 라벨을 그때그때 반영. 연결된
+  링크에는 대시보드와 같은 흐름 애니메이션도 적용. 연동 상태 조회 로직을
+  `lib/useIntegrations.ts` 훅으로 분리해 대시보드와 구성도 페이지가 같은
+  판정 규칙을 공유하도록 함.
+
 ## 0.1.44
 
 - 리팩터: 대시보드 "계정 연결 구조" 다이어그램의 위성 노드 좌표를 하드코딩된

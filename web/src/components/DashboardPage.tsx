@@ -1,6 +1,6 @@
-import { useEffect, useState, type CSSProperties } from "react";
-import * as api from "../lib/api";
+import type { CSSProperties } from "react";
 import type { Config, OpaIntegration, Role, S3IamIntegration, TrinoIntegration } from "../lib/api";
+import { useIntegrations } from "../lib/useIntegrations";
 
 type View = "dashboard" | "vault" | "graph" | "tags" | "search" | "audit" | "guide" | "settings" | "arch";
 
@@ -322,41 +322,7 @@ export function DashboardPage({
   onNavigateView: (v: View) => void;
 }) {
   const vaultSub = config ? `${config.mode} 모드` : "";
-  const [trino, setTrino] = useState<TrinoIntegration>({ enabled: false });
-  const [opa, setOpa] = useState<OpaIntegration>({ enabled: false });
-  const [s3iam, setS3iam] = useState<S3IamIntegration>({ enabled: false });
-
-  useEffect(() => {
-    let cancelled = false;
-    api
-      .getTrinoIntegration()
-      .then((data) => {
-        if (!cancelled) setTrino(data);
-      })
-      .catch(() => {
-        // Leave the disabled default — matches "not configured" so the
-        // Trino card falls back to the same placeholder as the others.
-      });
-    api
-      .getOpaIntegration()
-      .then((data) => {
-        if (!cancelled) setOpa(data);
-      })
-      .catch(() => {
-        // Leave the disabled default — same fallback as above.
-      });
-    api
-      .getS3IamIntegration()
-      .then((data) => {
-        if (!cancelled) setS3iam(data);
-      })
-      .catch(() => {
-        // Leave the disabled default — same fallback as above.
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const { trino, opa, s3iam } = useIntegrations();
 
   const integratedNames = [
     "Vault",
