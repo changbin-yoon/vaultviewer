@@ -33,13 +33,9 @@ export function LoginPage() {
     <div className="min-h-screen flex items-center justify-center px-6">
       <div className="w-full max-w-[420px] flex flex-col gap-10">
         <div className="font-[var(--font-heading)] font-semibold text-[22px] tracking-wide">
-          VAULT<span className="text-[var(--color-accent)]">VIEWER</span>
+          ACCESS<span className="text-[var(--color-accent)]">LENS</span>
         </div>
         <form onSubmit={onSubmit} className="blueprint p-8">
-          <i className="corner tl" />
-          <i className="corner tr" />
-          <i className="corner bl" />
-          <i className="corner br" />
           <h3 className="mb-1.5">LDAP 로그인</h3>
           <p className="text-sm text-muted mb-6">디렉터리 그룹에 따라 역할이 자동으로 결정됩니다.</p>
 
@@ -63,7 +59,7 @@ export function LoginPage() {
             />
           </div>
 
-          {error && <p className="text-sm mb-3" style={{ color: "#b3432f" }}>{error}</p>}
+          {error && <p className="text-sm mb-3" style={{ color: "var(--color-danger)" }}>{error}</p>}
 
           <button className="btn btn-primary btn-block" disabled={busy || !username || !password}>
             {busy ? "로그인 중…" : "로그인"}

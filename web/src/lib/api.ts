@@ -47,12 +47,12 @@ export class ApiError extends Error {
   }
 }
 
-let token: string | null = localStorage.getItem("vaultviewer_token");
+let token: string | null = localStorage.getItem("accesslens_token");
 
 export function setToken(next: string | null) {
   token = next;
-  if (next) localStorage.setItem("vaultviewer_token", next);
-  else localStorage.removeItem("vaultviewer_token");
+  if (next) localStorage.setItem("accesslens_token", next);
+  else localStorage.removeItem("accesslens_token");
 }
 
 export function getToken() {

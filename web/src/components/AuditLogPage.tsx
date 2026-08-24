@@ -75,7 +75,7 @@ export function AuditLogPage() {
         <span className="flex items-center gap-1.5 text-xs text-muted">
           <span
             className="inline-block rounded-full"
-            style={{ width: 6, height: 6, background: live ? "#4f9d8f" : "var(--color-divider)" }}
+            style={{ width: 6, height: 6, background: live ? "var(--color-good)" : "var(--color-divider)" }}
           />
           {live ? "실시간 연결됨" : "연결 중…"}
         </span>

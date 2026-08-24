@@ -3,16 +3,16 @@ package auth
 import (
 	"testing"
 
-	"github.com/vaultviewer/vaultviewer/internal/model"
+	"github.com/accesslens/accesslens/internal/model"
 )
 
 func setRequiredEnv(t *testing.T) {
 	t.Helper()
 	for k, v := range map[string]string{
-		"VAULTVIEWER_LDAP_HOST":          "ldap.example.com",
-		"VAULTVIEWER_LDAP_BASE_DN":       "dc=example,dc=com",
-		"VAULTVIEWER_LDAP_BIND_DN":       "cn=svc,dc=example,dc=com",
-		"VAULTVIEWER_LDAP_BIND_PASSWORD": "secret",
+		"ACCESSLENS_LDAP_HOST":          "ldap.example.com",
+		"ACCESSLENS_LDAP_BASE_DN":       "dc=example,dc=com",
+		"ACCESSLENS_LDAP_BIND_DN":       "cn=svc,dc=example,dc=com",
+		"ACCESSLENS_LDAP_BIND_PASSWORD": "secret",
 	} {
 		t.Setenv(k, v)
 	}
@@ -20,7 +20,7 @@ func setRequiredEnv(t *testing.T) {
 
 func TestLoadConfigFromEnvCommaSeparatedGroups(t *testing.T) {
 	setRequiredEnv(t)
-	t.Setenv("VAULTVIEWER_LDAP_GROUP_ADM", "dt-bi-adm, platform-admins")
+	t.Setenv("ACCESSLENS_LDAP_GROUP_ADM", "dt-bi-adm, platform-admins")
 
 	cfg, err := LoadConfigFromEnv()
 	if err != nil {

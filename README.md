@@ -1,7 +1,9 @@
-# VaultViewer
+# AccessLens
 
-LDAP 기반 RBAC를 지원하는 웹 시크릿/볼트 뷰어. 로컬 파일(마운트된 디렉토리) 모드와
-쿠버네티스 클러스터(Kubernetes Secrets) 모드를 모두 지원합니다.
+LDAP 기반 RBAC를 지원하는 웹 시크릿/권한 뷰어. 로컬 파일(마운트된 디렉토리) 모드와
+쿠버네티스 클러스터(Kubernetes Secrets) 모드를 모두 지원합니다. (Helm 차트/이미지의
+내부 명칭은 이전 이름인 `vaultviewer`를 그대로 씁니다 — 이유는
+[`charts/vaultviewer/README.md`](charts/vaultviewer/README.md) 참고.)
 
 - **저장소**: https://github.com/changbin-yoon/vaultviewer
 - **백엔드**: Go (`cmd/server`, `internal/`) — LDAP 인증/RBAC, 감사 로그, 그룹별
@@ -30,23 +32,23 @@ helm install vaultviewer charts/vaultviewer -f my-values.yaml
 
 ## AI agent 연동 (MCP 서버)
 
-`cmd/mcp-server`는 이미 떠 있는 VaultViewer 서버(`cmd/server`)의 REST API를
+`cmd/mcp-server`는 이미 떠 있는 AccessLens 서버(`cmd/server`)의 REST API를
 [MCP](https://modelcontextprotocol.io)로 감싼 별도 바이너리입니다. Claude Code
 같은 MCP 클라이언트가 이 서버를 실행하면 볼트를 읽기 전용 툴 5개
 (`search_vault`, `read_note`, `list_tree`, `get_note_history`,
 `get_ontology_graph`)로 조회할 수 있습니다 — REST API를 직접 호출하거나
 프론트매터를 스스로 파싱할 필요가 없습니다.
 
-storage/auth 로직을 새로 구현하지 않고, VAULTVIEWER_URL의 `/api/*`를 단일
+storage/auth 로직을 새로 구현하지 않고, ACCESSLENS_URL의 `/api/*`를 단일
 서비스 계정으로 호출만 하는 얇은 클라이언트입니다. RBAC은 그 계정의 role을
 그대로 상속하므로(agent 권한의 상한), 읽기 전용 툴만 쓸 거라면 `view` role
 LDAP 계정 하나로 충분합니다.
 
 ```bash
 go build -o vv-mcp ./cmd/mcp-server
-VAULTVIEWER_URL=http://localhost:8080 \
-VAULTVIEWER_USERNAME=<service-account> \
-VAULTVIEWER_PASSWORD=<password> \
+ACCESSLENS_URL=http://localhost:8080 \
+ACCESSLENS_USERNAME=<service-account> \
+ACCESSLENS_PASSWORD=<password> \
   ./vv-mcp --transport stdio
 ```
 
@@ -59,9 +61,9 @@ Claude Code에 등록하려면 `.mcp.json`에 다음과 같이 추가합니다:
       "command": "/path/to/vv-mcp",
       "args": ["--transport", "stdio"],
       "env": {
-        "VAULTVIEWER_URL": "http://localhost:8080",
-        "VAULTVIEWER_USERNAME": "<service-account>",
-        "VAULTVIEWER_PASSWORD": "<password>"
+        "ACCESSLENS_URL": "http://localhost:8080",
+        "ACCESSLENS_USERNAME": "<service-account>",
+        "ACCESSLENS_PASSWORD": "<password>"
       }
     }
   }

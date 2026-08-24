@@ -26,14 +26,14 @@ type Config struct {
 	Region string
 	UseSSL bool
 	// Prefix namespaces objects inside the bucket (e.g. the Helm release
-	// name), so multiple VaultViewer instances can safely share one bucket.
+	// name), so multiple AccessLens instances can safely share one bucket.
 	Prefix string
 	// Interval between sync passes.
 	Interval time.Duration
 }
 
 // Enabled reports whether enough configuration is present to start the
-// syncer. Backup is opt-in: leaving VAULTVIEWER_S3_ENDPOINT unset disables
+// syncer. Backup is opt-in: leaving ACCESSLENS_S3_ENDPOINT unset disables
 // it entirely rather than failing startup.
 func (c Config) Enabled() bool {
 	return c.Endpoint != "" && c.Bucket != "" && c.AccessKey != "" && c.SecretKey != ""
@@ -41,30 +41,30 @@ func (c Config) Enabled() bool {
 
 // LoadConfigFromEnv builds a Config from environment variables:
 //
-//	VAULTVIEWER_S3_ENDPOINT               (unset disables backup entirely)
-//	VAULTVIEWER_S3_ACCESS_KEY
-//	VAULTVIEWER_S3_SECRET_KEY
-//	VAULTVIEWER_S3_BUCKET
-//	VAULTVIEWER_S3_REGION                 (default "us-east-1")
-//	VAULTVIEWER_S3_USE_SSL                (default false, matches VAULTVIEWER_LDAP_TLS convention)
-//	VAULTVIEWER_S3_PREFIX                 (default "")
-//	VAULTVIEWER_BACKUP_INTERVAL_MINUTES   (default 30)
+//	ACCESSLENS_S3_ENDPOINT               (unset disables backup entirely)
+//	ACCESSLENS_S3_ACCESS_KEY
+//	ACCESSLENS_S3_SECRET_KEY
+//	ACCESSLENS_S3_BUCKET
+//	ACCESSLENS_S3_REGION                 (default "us-east-1")
+//	ACCESSLENS_S3_USE_SSL                (default false, matches ACCESSLENS_LDAP_TLS convention)
+//	ACCESSLENS_S3_PREFIX                 (default "")
+//	ACCESSLENS_BACKUP_INTERVAL_MINUTES   (default 30)
 func LoadConfigFromEnv() (Config, error) {
 	cfg := Config{
-		Endpoint:  os.Getenv("VAULTVIEWER_S3_ENDPOINT"),
-		AccessKey: os.Getenv("VAULTVIEWER_S3_ACCESS_KEY"),
-		SecretKey: os.Getenv("VAULTVIEWER_S3_SECRET_KEY"),
-		Bucket:    os.Getenv("VAULTVIEWER_S3_BUCKET"),
-		Region:    envOr("VAULTVIEWER_S3_REGION", "us-east-1"),
-		UseSSL:    os.Getenv("VAULTVIEWER_S3_USE_SSL") == "true",
-		Prefix:    os.Getenv("VAULTVIEWER_S3_PREFIX"),
+		Endpoint:  os.Getenv("ACCESSLENS_S3_ENDPOINT"),
+		AccessKey: os.Getenv("ACCESSLENS_S3_ACCESS_KEY"),
+		SecretKey: os.Getenv("ACCESSLENS_S3_SECRET_KEY"),
+		Bucket:    os.Getenv("ACCESSLENS_S3_BUCKET"),
+		Region:    envOr("ACCESSLENS_S3_REGION", "us-east-1"),
+		UseSSL:    os.Getenv("ACCESSLENS_S3_USE_SSL") == "true",
+		Prefix:    os.Getenv("ACCESSLENS_S3_PREFIX"),
 	}
 
 	minutes := 30
-	if v := os.Getenv("VAULTVIEWER_BACKUP_INTERVAL_MINUTES"); v != "" {
+	if v := os.Getenv("ACCESSLENS_BACKUP_INTERVAL_MINUTES"); v != "" {
 		parsed, err := strconv.Atoi(v)
 		if err != nil || parsed <= 0 {
-			return Config{}, fmt.Errorf("invalid VAULTVIEWER_BACKUP_INTERVAL_MINUTES %q: must be a positive integer", v)
+			return Config{}, fmt.Errorf("invalid ACCESSLENS_BACKUP_INTERVAL_MINUTES %q: must be a positive integer", v)
 		}
 		minutes = parsed
 	}

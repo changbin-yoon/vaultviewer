@@ -1,4 +1,4 @@
-module github.com/vaultviewer/vaultviewer
+module github.com/accesslens/accesslens
 
 go 1.26.7
 

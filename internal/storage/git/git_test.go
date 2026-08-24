@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/vaultviewer/vaultviewer/internal/model"
-	"github.com/vaultviewer/vaultviewer/internal/storage/local"
+	"github.com/accesslens/accesslens/internal/model"
+	"github.com/accesslens/accesslens/internal/storage/local"
 )
 
 type fakeAudit struct {
@@ -101,7 +101,7 @@ func TestSaveCreatesACommit(t *testing.T) {
 	}
 
 	log := gitLog(t, root, "log", "--format=%an <%ae>|%s")
-	if !strings.Contains(log, "alice <alice@vaultviewer.local>") {
+	if !strings.Contains(log, "alice <alice@accesslens.local>") {
 		t.Errorf("expected commit authored by alice, got:\n%s", log)
 	}
 	if !strings.Contains(log, "save: note.md") {

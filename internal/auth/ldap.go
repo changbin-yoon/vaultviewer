@@ -8,8 +8,8 @@ import (
 
 	goldap "github.com/go-ldap/ldap/v3"
 
-	"github.com/vaultviewer/vaultviewer/internal/model"
-	"github.com/vaultviewer/vaultviewer/internal/teams"
+	"github.com/accesslens/accesslens/internal/model"
+	"github.com/accesslens/accesslens/internal/teams"
 )
 
 // ErrInvalidCredentials is returned when a username/password pair does not
@@ -17,7 +17,7 @@ import (
 var ErrInvalidCredentials = errors.New("auth: invalid credentials")
 
 // ErrNoRole is returned when a user authenticates successfully but belongs
-// to no LDAP group mapped to a VaultViewer role, so they are granted no
+// to no LDAP group mapped to a AccessLens role, so they are granted no
 // access.
 var ErrNoRole = errors.New("auth: user has no role-granting group membership")
 

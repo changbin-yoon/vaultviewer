@@ -1,22 +1,26 @@
 @import "tailwindcss";
 
-/* Design tokens ported from the VaultViewer Claude Design canvas
-   (Industry design system): claude.ai/design/p/89672d4d-...
-   /_ds/industry-.../styles.css */
+/* AccessLens design tokens — teal accent, Manrope/IBM Plex, rounded shapes.
+   Scoped equivalents for the 대시보드/구성도 pages live in
+   accesslens-dashboard.css; kept separate since those two pages predate
+   this app-wide rollout and have their own light/dark handling. */
 @theme {
-  --color-bg: #f2f2f3;
-  --color-surface: #e9e9ea;
-  --color-text: #1d1f20;
-  --color-accent: #7c6bab;
-  --color-accent-2: #9b8fc4;
-  --color-divider: color-mix(in srgb, #1d1f20 16%, transparent);
+  --color-bg: #eef1f2;
+  --color-surface: #e2e8ea;
+  --color-text: #12181b;
+  --color-accent: #0f7c86;
+  --color-accent-2: #1c9aa5;
+  --color-divider: color-mix(in srgb, #12181b 16%, transparent);
 
-  --color-accent-100: #f1eefa;
-  --color-accent-800: #453a6b;
+  --color-accent-100: #d8ecee;
+  --color-accent-800: #0b5f68;
 
-  --font-heading: "Barlow Condensed", "Noto Sans KR", system-ui, sans-serif;
-  --font-body: "Barlow", "Noto Sans KR", system-ui, sans-serif;
-  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  --color-danger: #c23b3b;
+  --color-good: #1f8a52;
+
+  --font-heading: "Manrope", "Noto Sans KR", system-ui, sans-serif;
+  --font-body: "IBM Plex Sans", "Noto Sans KR", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
 body {
@@ -41,11 +45,11 @@ h1, h2, h3, h4, h5, h6 {
   font-family: var(--font-heading); font-weight: 600; font-size: 14px; line-height: 1.2;
   color: var(--color-text);
   background: transparent; border: 1px solid var(--color-divider);
-  padding: 8px 14px; border-radius: 0;
+  padding: 8px 14px; border-radius: 8px;
 }
 .btn:disabled { opacity: 0.45; cursor: not-allowed; }
 .btn-primary { background: var(--color-accent); color: var(--color-bg); border-color: var(--color-accent); }
-.btn-primary:hover:not(:disabled) { background: #675a92; }
+.btn-primary:hover:not(:disabled) { background: color-mix(in srgb, var(--color-accent) 82%, black); }
 .btn-secondary:hover:not(:disabled) { background: color-mix(in srgb, var(--color-text) 7%, transparent); }
 .btn-ghost { border-color: transparent; color: var(--color-accent); padding-inline: 4px; }
 .btn-ghost:hover:not(:disabled) { background: color-mix(in srgb, var(--color-accent) 10%, transparent); }
@@ -56,13 +60,13 @@ h1, h2, h3, h4, h5, h6 {
 .input {
   width: 100%; min-height: 36px; padding: 6px 10px; font: inherit; font-size: 14px;
   color: var(--color-text); caret-color: var(--color-accent);
-  background: var(--color-surface); border: 1px solid var(--color-divider); border-radius: 0;
+  background: var(--color-surface); border: 1px solid var(--color-divider); border-radius: 8px;
 }
 .input:hover { border-color: color-mix(in srgb, var(--color-text) 45%, transparent); }
 .input:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 0; border-color: var(--color-accent); }
 .input:disabled { opacity: 0.5; cursor: not-allowed; }
 
-.seg { display: inline-flex; overflow: hidden; border: 1px solid var(--color-divider); }
+.seg { display: inline-flex; overflow: hidden; border: 1px solid var(--color-divider); border-radius: 8px; }
 .seg-opt { display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; font-size: 13px; cursor: pointer; }
 .seg-opt + .seg-opt { border-left: 1px solid var(--color-divider); }
 .seg-opt:has(input:checked) { background: var(--color-accent); color: var(--color-bg); }
@@ -70,9 +74,9 @@ h1, h2, h3, h4, h5, h6 {
 .seg-opt input { position: absolute; opacity: 0; width: 0; height: 0; pointer-events: none; }
 
 /* — tags — */
-.tag { display: inline-flex; align-items: center; font-size: 11px; letter-spacing: 0.02em; padding: 3px 10px; }
+.tag { display: inline-flex; align-items: center; font-size: 11px; letter-spacing: 0.02em; padding: 3px 10px; border-radius: 999px; }
 .tag-accent { background: var(--color-accent-100); color: var(--color-accent-800); }
-.tag-neutral { background: #f5f5f8; color: #424244; }
+.tag-neutral { background: color-mix(in srgb, var(--color-text) 6%, white); color: color-mix(in srgb, var(--color-text) 78%, transparent); }
 .tag-outline { border: 1px solid var(--color-accent); color: var(--color-accent); }
 
 /* — table — */
@@ -85,16 +89,11 @@ h1, h2, h3, h4, h5, h6 {
 .table td { padding: 8px; border-bottom: 1px solid color-mix(in srgb, var(--color-text) 8%, transparent); vertical-align: middle; }
 .table tbody tr:hover { background: color-mix(in srgb, var(--color-text) 4%, transparent); }
 
-/* — blueprint frame: registration-mark corners for callouts/empty states — */
-.blueprint { position: relative; border: 1px solid var(--color-divider); }
-.blueprint > .corner { position: absolute; width: 11px; height: 11px; color: color-mix(in srgb, var(--color-text) 55%, transparent); }
-.blueprint > .corner::before, .blueprint > .corner::after { content: ""; position: absolute; background: currentColor; }
-.blueprint > .corner::before { left: 5px; top: 0; width: 1px; height: 100%; }
-.blueprint > .corner::after { top: 5px; left: 0; width: 100%; height: 1px; }
-.blueprint > .corner.tl { top: -6px; left: -6px; }
-.blueprint > .corner.tr { top: -6px; right: -6px; }
-.blueprint > .corner.bl { bottom: -6px; left: -6px; }
-.blueprint > .corner.br { bottom: -6px; right: -6px; }
+/* — panel: rounded bordered card, used for callouts/empty states/forms — */
+.blueprint {
+  position: relative; border: 1px solid var(--color-divider); border-radius: 14px;
+  background: color-mix(in srgb, var(--color-surface) 50%, transparent);
+}
 
 /* — tree — */
 .tree-row {
@@ -110,7 +109,8 @@ h1, h2, h3, h4, h5, h6 {
 /* — rendered markdown (Obsidian notes) — */
 .md-frontmatter {
   font-size: 12px; white-space: pre-wrap; color: color-mix(in srgb, var(--color-text) 65%, transparent);
-  background: var(--color-surface); border: 1px solid var(--color-divider); padding: 12px 14px; margin: 0 0 24px;
+  background: var(--color-surface); border: 1px solid var(--color-divider); border-radius: 10px;
+  padding: 12px 14px; margin: 0 0 24px;
 }
 .md-body { font-size: 15px; line-height: 1.65; max-width: 760px; }
 .md-body h1, .md-body h2, .md-body h3, .md-body h4 { margin: 1.4em 0 0.5em; }
@@ -122,11 +122,11 @@ h1, h2, h3, h4, h5, h6 {
 .md-body hr { border: none; border-top: 1px solid var(--color-divider); margin: 2em 0; }
 .md-body code {
   font-family: var(--font-mono); font-size: 0.9em; background: var(--color-surface);
-  padding: 0.1em 0.4em; border: 1px solid var(--color-divider);
+  padding: 0.1em 0.4em; border: 1px solid var(--color-divider); border-radius: 5px;
 }
 .md-body pre {
   font-family: var(--font-mono); font-size: 13px; background: var(--color-surface);
-  border: 1px solid var(--color-divider); padding: 14px; overflow-x: auto; margin: 0 0 1em;
+  border: 1px solid var(--color-divider); border-radius: 10px; padding: 14px; overflow-x: auto; margin: 0 0 1em;
 }
 .md-body pre code { border: none; padding: 0; background: none; }
 .md-body table { width: 100%; border-collapse: collapse; font-size: 14px; margin: 0 0 1em; }
@@ -142,7 +142,7 @@ h1, h2, h3, h4, h5, h6 {
 }
 .callout {
   margin: 0 0 1.2em; padding: 12px 16px; background: color-mix(in srgb, var(--color-accent) 6%, transparent);
-  border-left: 3px solid var(--color-accent);
+  border-left: 3px solid var(--color-accent); border-radius: 0 10px 10px 0;
 }
 .callout-body > p:last-child { margin-bottom: 0; }
 .wikilink {
@@ -152,6 +152,6 @@ h1, h2, h3, h4, h5, h6 {
 .wikilink:hover { color: var(--color-accent-800); }
 .mermaid-diagram {
   margin: 0 0 1.2em; padding: 16px; background: var(--color-bg);
-  border: 1px solid var(--color-divider); overflow-x: auto; text-align: center;
+  border: 1px solid var(--color-divider); border-radius: 10px; overflow-x: auto; text-align: center;
 }
 .mermaid-diagram svg { max-width: 100%; }

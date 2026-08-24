@@ -4,7 +4,7 @@ import { RenderedBody } from "./MarkdownDocument";
 // 여는 페이지라, 예제 볼트를 지워도 항상 남아있고 실수로 편집/삭제될 일이
 // 없다.
 const GUIDE = `
-VaultViewer에서 노트를 쓸 때 알아두면 좋은 마크다운/옵시디언 문법을 정리했습니다.
+AccessLens에서 노트를 쓸 때 알아두면 좋은 마크다운/옵시디언 문법을 정리했습니다.
 
 ## 프론트매터
 

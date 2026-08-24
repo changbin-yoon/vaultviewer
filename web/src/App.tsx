@@ -12,11 +12,14 @@ import { GraphView } from "./components/GraphView";
 import { TagsPage } from "./components/TagsPage";
 import { SearchPage } from "./components/SearchPage";
 import { GuidePage } from "./components/GuidePage";
+import { DashboardPage } from "./components/DashboardPage";
+import { ArchPage } from "./components/ArchPage";
 
-type View = "vault" | "graph" | "tags" | "search" | "audit" | "guide" | "settings";
+type View = "dashboard" | "vault" | "graph" | "tags" | "search" | "audit" | "guide" | "settings" | "arch";
 
 function Shell() {
-  const [view, setView] = useState<View>("vault");
+  const { session } = useAuth();
+  const [view, setView] = useState<View>("dashboard");
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [config, setConfig] = useState<Config | null>(null);
   // Bumped whenever a note/namespace is created or deleted, so the sidebar
@@ -44,9 +47,16 @@ function Shell() {
     }
   }, [sidebarCollapsed]);
 
+  // Root only mounts Shell once a session exists, but useAuth()'s return
+  // type is still nullable here — narrow it so DashboardPage below can take
+  // a non-null session prop instead of re-checking everywhere.
+  if (!session) return null;
+
   return (
     <div className="min-h-screen flex flex-col">
       <TopBar config={config} view={view} onNavigateView={setView} />
+      {view === "dashboard" && <DashboardPage config={config} session={session} onNavigateView={setView} />}
+      {view === "arch" && <ArchPage />}
       {view === "vault" && (
         <div className="grid grow" style={{ gridTemplateColumns: sidebarCollapsed ? "36px 1fr" : "264px 1fr" }}>
           {sidebarCollapsed ? (

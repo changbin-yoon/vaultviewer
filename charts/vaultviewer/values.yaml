@@ -1,15 +1,16 @@
-# Default values for vaultviewer.
+# Default values for AccessLens (Helm chart machine name stays "vaultviewer" —
+# see README for why).
 
 image:
   repository: yoochabi/vaultviewer
-  tag: "0.1.34"
+  tag: "0.1.36"
   pullPolicy: IfNotPresent
 
 imagePullSecrets: []
 
 replicaCount: 1
 
-# VAULTVIEWER_MODE: how the server reads/writes secrets.
+# ACCESSLENS_MODE: how the server reads/writes secrets.
 #   local   — a directory mounted into the container (see `local.persistence`).
 #   cluster — Kubernetes Secrets in `cluster.namespace`, via the pod's own
 #             service account (see `cluster.rbac`).
@@ -34,7 +35,7 @@ local:
   git:
     # Makes the mounted directory a real git repository — every save/delete
     # is also committed there (author = the acting user, committer = a
-    # fixed "VaultViewer" service identity). Local-repo only, no push to a
+    # fixed "AccessLens" service identity). Local-repo only, no push to a
     # remote. Off by default; existing audit log/history behavior is
     # unchanged either way — this runs alongside it, not instead of it.
     enabled: false
@@ -50,9 +51,9 @@ cluster:
     create: true
 
 # -- LDAP authentication -------------------------------------------------
-# Every VaultViewer role (adm/dev/view) is resolved from LDAP group
+# Every AccessLens role (adm/dev/view) is resolved from LDAP group
 # membership; see internal/auth/config.go. Values here map 1:1 to the
-# server's VAULTVIEWER_LDAP_* environment variables.
+# server's ACCESSLENS_LDAP_* environment variables.
 ldap:
   host: ""
   port: 389
@@ -71,7 +72,7 @@ ldap:
   # for anything real.
   bindPasswordValue: ""
 
-  # LDAP group CN -> VaultViewer role. Change the values (not the keys) to
+  # LDAP group CN -> AccessLens role. Change the values (not the keys) to
   # match your directory's actual group names. Each value may be a single
   # string or a list — a list maps multiple LDAP groups onto the same role
   # (e.g. both "dt-bi-adm" and "platform-admins" granting adm).
@@ -106,7 +107,7 @@ backup:
   region: "us-east-1"
   useSSL: false
   # 버킷 안에서 이 릴리스 데이터를 구분할 접두사. 비워두면 릴리스 이름을 사용 —
-  # 같은 버킷을 여러 VaultViewer 릴리스가 공유해도 서로 덮어쓰지 않음.
+  # 같은 버킷을 여러 AccessLens 릴리스가 공유해도 서로 덮어쓰지 않음.
   prefix: ""
   # 몇 분마다 동기화할지. 그날 날짜 프리픽스(YYYY-MM-DD) 아래에서 바뀌었거나
   # 새로 생긴 파일만 업로드함(로컬 MD5 vs S3 ETag 비교) — 지난 날짜의 백업은
@@ -138,7 +139,7 @@ ingress:
   className: ""
   annotations: {}
   hosts:
-    - host: vaultviewer.local
+    - host: accesslens.local
       paths:
         - path: /
           pathType: Prefix

@@ -2,7 +2,7 @@
 {{- $ldapSecretKey := .Values.ldap.existingSecretKey -}}
 {{- if not .Values.ldap.existingSecret -}}
 {{- if not .Values.ldap.bindPasswordValue -}}
-{{- fail "Set ldap.existingSecret (recommended) or ldap.bindPasswordValue so the LDAP bind password can be provided — VaultViewer refuses to hardcode it." -}}
+{{- fail "Set ldap.existingSecret (recommended) or ldap.bindPasswordValue so the LDAP bind password can be provided — AccessLens refuses to hardcode it." -}}
 {{- end -}}
 {{- end -}}
 {{- if .Values.backup.enabled -}}
@@ -10,7 +10,7 @@
 {{- fail "backup.enabled is only supported when mode: local (it mirrors the mounted directory; cluster mode's data already lives in Kubernetes Secrets)." -}}
 {{- end -}}
 {{- if not .Values.backup.existingSecret -}}
-{{- fail "Set backup.existingSecret so the S3 access/secret key can be provided — VaultViewer refuses to hardcode it." -}}
+{{- fail "Set backup.existingSecret so the S3 access/secret key can be provided — AccessLens refuses to hardcode it." -}}
 {{- end -}}
 {{- end -}}
 apiVersion: apps/v1
@@ -49,7 +49,7 @@ spec:
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:
-        - name: vaultviewer
+        - name: accesslens
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           securityContext:
@@ -59,75 +59,75 @@ spec:
               containerPort: 8080
               protocol: TCP
           env:
-            - name: VAULTVIEWER_MODE
+            - name: ACCESSLENS_MODE
               value: {{ .Values.mode | required "mode must be \"local\" or \"cluster\"" | quote }}
-            - name: VAULTVIEWER_DEPLOYMENT_LABEL
+            - name: ACCESSLENS_DEPLOYMENT_LABEL
               value: {{ .Values.deploymentLabel | quote }}
             {{- if eq .Values.mode "local" }}
             - name: VAULT_LOCAL_ROOT
               value: {{ .Values.local.persistence.mountPath | quote }}
-            - name: VAULTVIEWER_GIT_ENABLED
+            - name: ACCESSLENS_GIT_ENABLED
               value: {{ dig "git" "enabled" false .Values.local | quote }}
             {{- else if eq .Values.mode "cluster" }}
-            - name: VAULTVIEWER_K8S_NAMESPACE
+            - name: ACCESSLENS_K8S_NAMESPACE
               value: {{ include "vaultviewer.clusterNamespace" . | quote }}
             {{- end }}
-            - name: VAULTVIEWER_LDAP_HOST
+            - name: ACCESSLENS_LDAP_HOST
               value: {{ .Values.ldap.host | required "ldap.host is required" | quote }}
-            - name: VAULTVIEWER_LDAP_PORT
+            - name: ACCESSLENS_LDAP_PORT
               value: {{ .Values.ldap.port | quote }}
-            - name: VAULTVIEWER_LDAP_TLS
+            - name: ACCESSLENS_LDAP_TLS
               value: {{ .Values.ldap.tls | quote }}
-            - name: VAULTVIEWER_LDAP_BASE_DN
+            - name: ACCESSLENS_LDAP_BASE_DN
               value: {{ .Values.ldap.baseDN | required "ldap.baseDN is required" | quote }}
-            - name: VAULTVIEWER_LDAP_USER_OU
+            - name: ACCESSLENS_LDAP_USER_OU
               value: {{ .Values.ldap.userOU | quote }}
-            - name: VAULTVIEWER_LDAP_GROUP_OU
+            - name: ACCESSLENS_LDAP_GROUP_OU
               value: {{ .Values.ldap.groupOU | quote }}
-            - name: VAULTVIEWER_LDAP_BIND_DN
+            - name: ACCESSLENS_LDAP_BIND_DN
               value: {{ .Values.ldap.bindDN | required "ldap.bindDN is required" | quote }}
-            - name: VAULTVIEWER_LDAP_BIND_PASSWORD
+            - name: ACCESSLENS_LDAP_BIND_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: {{ $ldapSecretName }}
                   key: {{ $ldapSecretKey }}
             {{- range $role, $groups := .Values.ldap.groupRoleMap }}
-            - name: {{ printf "VAULTVIEWER_LDAP_GROUP_%s" ($role | upper) }}
+            - name: {{ printf "ACCESSLENS_LDAP_GROUP_%s" ($role | upper) }}
               {{- /* 값이 리스트면 콤마로 합쳐서 하나의 env var로 전달 (여러 LDAP 그룹 -> 같은 역할) */}}
               value: {{ (kindIs "slice" $groups) | ternary (join "," $groups) $groups | quote }}
             {{- end }}
             {{- if .Values.session.existingSecret }}
-            - name: VAULTVIEWER_SESSION_SECRET
+            - name: ACCESSLENS_SESSION_SECRET
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.session.existingSecret }}
                   key: {{ .Values.session.existingSecretKey }}
             {{- end }}
-            - name: VAULTVIEWER_SESSION_TTL_HOURS
+            - name: ACCESSLENS_SESSION_TTL_HOURS
               value: {{ .Values.session.ttlHours | quote }}
             {{- if .Values.cors.origin }}
-            - name: VAULTVIEWER_CORS_ORIGIN
+            - name: ACCESSLENS_CORS_ORIGIN
               value: {{ .Values.cors.origin | quote }}
             {{- end }}
             {{- if .Values.backup.enabled }}
-            - name: VAULTVIEWER_S3_ENDPOINT
+            - name: ACCESSLENS_S3_ENDPOINT
               value: {{ .Values.backup.endpoint | required "backup.endpoint is required when backup.enabled=true" | quote }}
-            - name: VAULTVIEWER_S3_BUCKET
+            - name: ACCESSLENS_S3_BUCKET
               value: {{ .Values.backup.bucket | required "backup.bucket is required when backup.enabled=true" | quote }}
-            - name: VAULTVIEWER_S3_REGION
+            - name: ACCESSLENS_S3_REGION
               value: {{ .Values.backup.region | quote }}
-            - name: VAULTVIEWER_S3_USE_SSL
+            - name: ACCESSLENS_S3_USE_SSL
               value: {{ .Values.backup.useSSL | quote }}
-            - name: VAULTVIEWER_S3_PREFIX
+            - name: ACCESSLENS_S3_PREFIX
               value: {{ .Values.backup.prefix | default (include "vaultviewer.fullname" .) | quote }}
-            - name: VAULTVIEWER_BACKUP_INTERVAL_MINUTES
+            - name: ACCESSLENS_BACKUP_INTERVAL_MINUTES
               value: {{ .Values.backup.intervalMinutes | quote }}
-            - name: VAULTVIEWER_S3_ACCESS_KEY
+            - name: ACCESSLENS_S3_ACCESS_KEY
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.backup.existingSecret }}
                   key: {{ .Values.backup.existingSecretAccessKeyKey }}
-            - name: VAULTVIEWER_S3_SECRET_KEY
+            - name: ACCESSLENS_S3_SECRET_KEY
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.backup.existingSecret }}

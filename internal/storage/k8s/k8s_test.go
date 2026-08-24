@@ -5,7 +5,7 @@ import (
 
 	"k8s.io/client-go/kubernetes/fake"
 
-	"github.com/vaultviewer/vaultviewer/internal/model"
+	"github.com/accesslens/accesslens/internal/model"
 )
 
 type fakeAudit struct {

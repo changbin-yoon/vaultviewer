@@ -3,8 +3,8 @@ package ontology
 import (
 	"testing"
 
-	"github.com/vaultviewer/vaultviewer/internal/audit"
-	"github.com/vaultviewer/vaultviewer/internal/storage/local"
+	"github.com/accesslens/accesslens/internal/audit"
+	"github.com/accesslens/accesslens/internal/storage/local"
 )
 
 func TestSplitFrontmatter(t *testing.T) {

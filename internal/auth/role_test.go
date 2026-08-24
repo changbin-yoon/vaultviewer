@@ -3,7 +3,7 @@ package auth
 import (
 	"testing"
 
-	"github.com/vaultviewer/vaultviewer/internal/model"
+	"github.com/accesslens/accesslens/internal/model"
 )
 
 func TestResolveRolePicksHighestPrecedence(t *testing.T) {

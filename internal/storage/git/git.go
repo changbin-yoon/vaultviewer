@@ -16,8 +16,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/vaultviewer/vaultviewer/internal/storage"
-	"github.com/vaultviewer/vaultviewer/internal/storage/local"
+	"github.com/accesslens/accesslens/internal/storage"
+	"github.com/accesslens/accesslens/internal/storage/local"
 )
 
 const gitignoreContent = `.vaultviewer-audit.jsonl
@@ -31,8 +31,8 @@ const gitignoreContent = `.vaultviewer-audit.jsonl
 // *author* field instead (see commitChange), so `git log` still shows who
 // really made each change.
 const (
-	serviceUserName  = "VaultViewer"
-	serviceUserEmail = "vaultviewer@local"
+	serviceUserName  = "AccessLens"
+	serviceUserEmail = "accesslens@local"
 )
 
 // Engine wraps a *local.Engine, embedding it so List/Read/GetHistory/Search
@@ -192,7 +192,7 @@ func (e *Engine) hasStagedDiff(paths []string) (bool, error) {
 // the repository-wide committer identity (set once in bootstrap) stays
 // fixed — so `git log` shows who really made the change.
 func (e *Engine) commit(user, message string) error {
-	author := fmt.Sprintf("%s <%s@vaultviewer.local>", user, user)
+	author := fmt.Sprintf("%s <%s@accesslens.local>", user, user)
 	_, err := e.run("commit", "--author", author, "-m", message)
 	return err
 }

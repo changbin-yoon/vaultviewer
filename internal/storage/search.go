@@ -5,7 +5,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/vaultviewer/vaultviewer/internal/model"
+	"github.com/accesslens/accesslens/internal/model"
 )
 
 // binaryExtensions lists file types skipped during full-text search — they

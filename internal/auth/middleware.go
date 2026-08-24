@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/vaultviewer/vaultviewer/internal/model"
+	"github.com/accesslens/accesslens/internal/model"
 )
 
 // AuthenticatedHandler is an http.HandlerFunc that also receives the

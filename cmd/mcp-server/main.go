@@ -1,10 +1,10 @@
-// Command mcp-server wraps VaultViewer's REST API as an MCP (Model Context
+// Command mcp-server wraps AccessLens's REST API as an MCP (Model Context
 // Protocol) server, so AI agents (Claude Code, Claude Desktop, or any other
 // MCP client) can query the vault's tree/search/notes/history/ontology
 // graph as tools instead of calling the REST API directly.
 //
 // This binary does not reimplement storage or auth — it authenticates once
-// against an already-running VaultViewer server as a single service
+// against an already-running AccessLens server as a single service
 // account (env-configured, never hardcoded) and proxies each tool call to
 // the matching REST endpoint. All tools are read-only; the service
 // account's role (view is enough) is the effective permission ceiling for
@@ -33,35 +33,35 @@ func main() {
 	addr := flag.String("addr", ":8090", "listen address, only used with --transport http")
 	flag.Parse()
 
-	baseURL := strings.TrimRight(envOr("VAULTVIEWER_URL", "http://localhost:8080"), "/")
-	username := os.Getenv("VAULTVIEWER_USERNAME")
-	password := os.Getenv("VAULTVIEWER_PASSWORD")
+	baseURL := strings.TrimRight(envOr("ACCESSLENS_URL", "http://localhost:8080"), "/")
+	username := os.Getenv("ACCESSLENS_USERNAME")
+	password := os.Getenv("ACCESSLENS_PASSWORD")
 	if username == "" || password == "" {
-		log.Fatal("VAULTVIEWER_USERNAME and VAULTVIEWER_PASSWORD are required")
+		log.Fatal("ACCESSLENS_USERNAME and ACCESSLENS_PASSWORD are required")
 	}
 
 	c := newClient(baseURL, username, password)
-	server := mcp.NewServer(&mcp.Implementation{Name: "vaultviewer", Version: "0.1.0"}, nil)
+	server := mcp.NewServer(&mcp.Implementation{Name: "accesslens", Version: "0.1.0"}, nil)
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name: "get_ontology_graph",
-		Description: "VaultViewer 볼트 전체의 온톨로지 그래프(노드 + 타입 있는 관계 엣지)를 " +
+		Description: "AccessLens 볼트 전체의 온톨로지 그래프(노드 + 타입 있는 관계 엣지)를 " +
 			"반환합니다. 인프라 컴포넌트 간 의존 관계나 하나가 죽었을 때 영향받는 범위를 물을 때 사용하세요.",
 	}, c.getOntologyGraph)
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "search_vault",
-		Description: "VaultViewer 볼트 전체를 전문(全文) 검색해 일치하는 노트 경로와 문맥 스니펫을 반환합니다.",
+		Description: "AccessLens 볼트 전체를 전문(全文) 검색해 일치하는 노트 경로와 문맥 스니펫을 반환합니다.",
 	}, c.searchVault)
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "read_note",
-		Description: "VaultViewer의 특정 노트 원문(마크다운)을 경로로 읽습니다.",
+		Description: "AccessLens의 특정 노트 원문(마크다운)을 경로로 읽습니다.",
 	}, c.readNote)
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "list_tree",
-		Description: "VaultViewer 볼트의 디렉토리 트리를 나열합니다. path를 비우면 루트 트리를 반환합니다.",
+		Description: "AccessLens 볼트의 디렉토리 트리를 나열합니다. path를 비우면 루트 트리를 반환합니다.",
 	}, c.listTree)
 
 	mcp.AddTool(server, &mcp.Tool{
@@ -86,7 +86,7 @@ func main() {
 	}
 }
 
-// client is a thin HTTP client for VaultViewer's REST API, authenticating
+// client is a thin HTTP client for AccessLens's REST API, authenticating
 // as a single service account. The session token is cached in memory and
 // transparently refreshed on a 401 (e.g. after the session TTL expires).
 type client struct {
@@ -163,7 +163,7 @@ func (c *client) tokenOrLogin(ctx context.Context) (string, error) {
 }
 
 // do issues an authenticated GET (or DELETE, but no tools in this binary
-// need one) against VaultViewer's REST API. On a 401 — most likely the
+// need one) against AccessLens's REST API. On a 401 — most likely the
 // cached session token expired — it discards the cached token, logs in
 // once more, and retries exactly once.
 func (c *client) do(ctx context.Context, method, path string, query url.Values) ([]byte, error) {
@@ -212,7 +212,7 @@ func (c *client) do(ctx context.Context, method, path string, query url.Values) 
 	}
 
 	if resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("vaultviewer %s %s: %s: %s", method, path, resp.Status, strings.TrimSpace(string(data)))
+		return nil, fmt.Errorf("accesslens %s %s: %s: %s", method, path, resp.Status, strings.TrimSpace(string(data)))
 	}
 	return data, nil
 }

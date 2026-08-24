@@ -1,7 +1,7 @@
 // Package ontology builds the same note graph (nodes + typed/untyped
 // edges) web/src/lib/vaultIndex.ts computes client-side for the graph
 // view — as a backend-servable structure, so a consumer that isn't the
-// VaultViewer frontend (an AI agent, a script, an MCP server wrapping this
+// AccessLens frontend (an AI agent, a script, an MCP server wrapping this
 // API) can get the whole ontology in one call instead of fetching every
 // note and re-implementing the frontmatter/wikilink parsing itself.
 //
@@ -20,7 +20,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/vaultviewer/vaultviewer/internal/storage"
+	"github.com/accesslens/accesslens/internal/storage"
 )
 
 // Node mirrors web/src/lib/vaultIndex.ts's GraphNode.

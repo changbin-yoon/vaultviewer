@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/vaultviewer/vaultviewer/internal/model"
+	"github.com/accesslens/accesslens/internal/model"
 )
 
 func TestSearchable(t *testing.T) {

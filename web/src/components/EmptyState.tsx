@@ -11,10 +11,6 @@ export function EmptyState({
 }) {
   return (
     <div className="blueprint px-9 py-9 text-center max-w-md mx-auto">
-      <i className="corner tl" />
-      <i className="corner tr" />
-      <i className="corner bl" />
-      <i className="corner br" />
       <h4 className="mb-2">{title}</h4>
       {description && <p className="text-sm text-muted mb-4">{description}</p>}
       {action}

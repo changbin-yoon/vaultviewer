@@ -499,7 +499,7 @@ export function MarkdownDocument({ path, onNavigate, onMutate }: Props) {
             )}
             {!editing && canDelete(role) && confirmingDelete && (
               <div className="flex items-center gap-2">
-                <span className="text-sm" style={{ color: "#b3432f" }}>
+                <span className="text-sm" style={{ color: "var(--color-danger)" }}>
                   {stripMdExtension(name)}을(를) 삭제할까요?
                 </span>
                 <button className="btn btn-secondary" disabled={busy} onClick={remove}>
@@ -550,9 +550,9 @@ export function MarkdownDocument({ path, onNavigate, onMutate }: Props) {
           </div>
         )}
 
-        {error && <p className="text-sm mb-4" style={{ color: "#b3432f" }}>{error}</p>}
+        {error && <p className="text-sm mb-4" style={{ color: "var(--color-danger)" }}>{error}</p>}
         {renameWarning && (
-          <p className="text-sm mb-4 flex items-center gap-2" style={{ color: "#b3432f" }}>
+          <p className="text-sm mb-4 flex items-center gap-2" style={{ color: "var(--color-danger)" }}>
             {renameWarning}
             <button className="underline decoration-dotted" onClick={() => setRenameWarning(null)}>
               닫기
@@ -605,7 +605,6 @@ export function MarkdownDocument({ path, onNavigate, onMutate }: Props) {
               />
             )}
             <div className="blueprint p-5 mt-5">
-              <i className="corner tl" /><i className="corner tr" /><i className="corner bl" /><i className="corner br" />
               <div className="field mb-3.5">
                 <label>변경 사유 (감사 로그에 기록됩니다)</label>
                 <input className="input" value={reason} onChange={(e) => setReason(e.target.value)} />

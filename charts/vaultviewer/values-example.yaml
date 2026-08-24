@@ -1,4 +1,5 @@
-# Starter values for a fresh VaultViewer install. Copy this file, fill in
+# Starter values for a fresh AccessLens install (Helm chart machine name
+# stays "vaultviewer" — see charts/vaultviewer/README.md). Copy this file, fill in
 # the placeholders, and deploy with:
 #
 #   helm install vaultviewer charts/vaultviewer -f my-values.yaml
@@ -37,7 +38,7 @@ ldap:
   bindDN: "cn=admin,dc=example,dc=com"
   existingSecret: vaultviewer-ldap
   existingSecretKey: bind-password
-  # Map your directory's actual LDAP group CNs to VaultViewer's three
+  # Map your directory's actual LDAP group CNs to AccessLens's three
   # roles. The keys (adm/dev/view) must stay as-is; only change the values.
   # 값은 문자열(그룹 1개) 또는 리스트(그룹 여러 개, 모두 같은 역할 부여) 둘 다 가능:
   #   adm:

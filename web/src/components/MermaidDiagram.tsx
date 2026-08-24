@@ -33,7 +33,7 @@ export function MermaidDiagram({ code }: { code: string }) {
 
   if (error) {
     return (
-      <div className="callout" style={{ borderColor: "#b3432f" }}>
+      <div className="callout" style={{ borderColor: "var(--color-danger)" }}>
         <div className="mb-1.5">
           <span className="tag tag-outline mono">MERMAID 오류</span>
         </div>

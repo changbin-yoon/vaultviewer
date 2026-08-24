@@ -23,7 +23,7 @@ func TestLoadConfigFromEnvDisabledByDefault(t *testing.T) {
 		t.Fatalf("LoadConfigFromEnv: %v", err)
 	}
 	if cfg.Enabled() {
-		t.Errorf("expected backup disabled when no VAULTVIEWER_S3_* env vars are set")
+		t.Errorf("expected backup disabled when no ACCESSLENS_S3_* env vars are set")
 	}
 	if cfg.Interval.Minutes() != 30 {
 		t.Errorf("Interval = %v, want 30m default", cfg.Interval)
@@ -31,16 +31,16 @@ func TestLoadConfigFromEnvDisabledByDefault(t *testing.T) {
 }
 
 func TestLoadConfigFromEnvInvalidInterval(t *testing.T) {
-	t.Setenv("VAULTVIEWER_BACKUP_INTERVAL_MINUTES", "not-a-number")
+	t.Setenv("ACCESSLENS_BACKUP_INTERVAL_MINUTES", "not-a-number")
 	if _, err := LoadConfigFromEnv(); err == nil {
-		t.Fatalf("expected error for non-numeric VAULTVIEWER_BACKUP_INTERVAL_MINUTES")
+		t.Fatalf("expected error for non-numeric ACCESSLENS_BACKUP_INTERVAL_MINUTES")
 	}
 }
 
 func TestLoadConfigFromEnvZeroInterval(t *testing.T) {
-	t.Setenv("VAULTVIEWER_BACKUP_INTERVAL_MINUTES", "0")
+	t.Setenv("ACCESSLENS_BACKUP_INTERVAL_MINUTES", "0")
 	if _, err := LoadConfigFromEnv(); err == nil {
-		t.Fatalf("expected error for zero VAULTVIEWER_BACKUP_INTERVAL_MINUTES")
+		t.Fatalf("expected error for zero ACCESSLENS_BACKUP_INTERVAL_MINUTES")
 	}
 }
 

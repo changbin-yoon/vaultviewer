@@ -198,7 +198,6 @@ export function SecretPanel({
         </div>
         {creatingNamespace && (
           <div className="blueprint p-5 my-5">
-            <i className="corner tl" /><i className="corner tr" /><i className="corner bl" /><i className="corner br" />
             <div className="field mb-4">
               <label>네임스페이스 이름</label>
               <input
@@ -209,7 +208,7 @@ export function SecretPanel({
                 autoFocus
               />
             </div>
-            {actionError && <p className="text-sm mb-3" style={{ color: "#b3432f" }}>{actionError}</p>}
+            {actionError && <p className="text-sm mb-3" style={{ color: "var(--color-danger)" }}>{actionError}</p>}
             <div className="flex gap-2.5">
               <button
                 className="btn btn-primary"
@@ -224,7 +223,6 @@ export function SecretPanel({
         )}
         {creatingNote && (
           <div className="blueprint p-5 my-5">
-            <i className="corner tl" /><i className="corner tr" /><i className="corner bl" /><i className="corner br" />
             <div className="field mb-4">
               <label>노트 이름</label>
               <input
@@ -235,7 +233,7 @@ export function SecretPanel({
                 autoFocus
               />
             </div>
-            {actionError && <p className="text-sm mb-3" style={{ color: "#b3432f" }}>{actionError}</p>}
+            {actionError && <p className="text-sm mb-3" style={{ color: "var(--color-danger)" }}>{actionError}</p>}
             <div className="flex gap-2.5">
               <button
                 className="btn btn-primary"
@@ -283,10 +281,10 @@ export function SecretPanel({
               <div className="text-left">
                 {confirmingDeleteGroup ? (
                   <div>
-                    <p className="text-sm mb-4" style={{ color: "#b3432f" }}>
+                    <p className="text-sm mb-4" style={{ color: "var(--color-danger)" }}>
                       /{state.groupPath}을(를) 삭제할까요?
                     </p>
-                    {actionError && <p className="text-sm mb-3" style={{ color: "#b3432f" }}>{actionError}</p>}
+                    {actionError && <p className="text-sm mb-3" style={{ color: "var(--color-danger)" }}>{actionError}</p>}
                     <div className="flex gap-2.5 justify-center">
                       <button
                         className="btn btn-secondary"
@@ -312,7 +310,7 @@ export function SecretPanel({
                         autoFocus
                       />
                     </div>
-                    {actionError && <p className="text-sm mb-3" style={{ color: "#b3432f" }}>{actionError}</p>}
+                    {actionError && <p className="text-sm mb-3" style={{ color: "var(--color-danger)" }}>{actionError}</p>}
                     <div className="flex gap-2.5 justify-center">
                       <button
                         className="btn btn-primary"
@@ -340,7 +338,7 @@ export function SecretPanel({
                         onChange={(e) => setNewKeyValue(e.target.value)}
                       />
                     </div>
-                    {actionError && <p className="text-sm mb-3" style={{ color: "#b3432f" }}>{actionError}</p>}
+                    {actionError && <p className="text-sm mb-3" style={{ color: "var(--color-danger)" }}>{actionError}</p>}
                     <div className="flex gap-2.5 justify-center">
                       <button
                         className="btn btn-primary"
@@ -364,7 +362,7 @@ export function SecretPanel({
                         autoFocus
                       />
                     </div>
-                    {actionError && <p className="text-sm mb-3" style={{ color: "#b3432f" }}>{actionError}</p>}
+                    {actionError && <p className="text-sm mb-3" style={{ color: "var(--color-danger)" }}>{actionError}</p>}
                     <div className="flex gap-2.5 justify-center">
                       <button
                         className="btn btn-primary"
@@ -481,7 +479,7 @@ export function SecretPanel({
           )}
           {!editing && canDelete(role) && confirmingDeleteGroup && (
             <div className="flex items-center gap-2">
-              <span className="text-sm" style={{ color: "#b3432f" }}>
+              <span className="text-sm" style={{ color: "var(--color-danger)" }}>
                 /{groupPath} 아래 {rows.length}개 키를 모두 삭제할까요?
               </span>
               <button className="btn btn-secondary" disabled={busy} onClick={deleteGroup}>
@@ -501,11 +499,10 @@ export function SecretPanel({
       </div>
       <div className="mono text-xs text-muted mb-5">/{groupPath}</div>
 
-      {actionError && <p className="text-sm mb-4" style={{ color: "#b3432f" }}>{actionError}</p>}
+      {actionError && <p className="text-sm mb-4" style={{ color: "var(--color-danger)" }}>{actionError}</p>}
 
       {addingKey && (
         <div className="blueprint p-5 mb-6">
-          <i className="corner tl" /><i className="corner tr" /><i className="corner bl" /><i className="corner br" />
           <div className="field mb-3.5">
             <label>키 이름</label>
             <input className="input mono" value={newKeyName} onChange={(e) => setNewKeyName(e.target.value)} />
@@ -579,7 +576,6 @@ export function SecretPanel({
 
       {editing && (
         <div className="blueprint p-5 mt-6">
-          <i className="corner tl" /><i className="corner tr" /><i className="corner bl" /><i className="corner br" />
           <div className="field mb-3.5">
             <label>변경 사유 (감사 로그에 기록됩니다)</label>
             <input className="input" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="예: 분기 회전 — INC-4821" />

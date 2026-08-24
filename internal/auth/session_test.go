@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/vaultviewer/vaultviewer/internal/model"
+	"github.com/accesslens/accesslens/internal/model"
 )
 
 func TestSessionManagerIssueAndVerify(t *testing.T) {

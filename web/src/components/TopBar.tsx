@@ -2,14 +2,16 @@ import { useAuth } from "../lib/auth";
 import { RoleTag } from "./RoleTag";
 import type { Config } from "../lib/api";
 
-type View = "vault" | "graph" | "tags" | "search" | "audit" | "guide" | "settings";
+type View = "dashboard" | "vault" | "graph" | "tags" | "search" | "audit" | "guide" | "settings" | "arch";
 
 const NAV: { key: View; label: string; adminOnly?: boolean }[] = [
+  { key: "dashboard", label: "대시보드" },
   { key: "vault", label: "문서" },
   { key: "graph", label: "그래프" },
   { key: "guide", label: "작성가이드" },
   { key: "tags", label: "태그" },
   { key: "search", label: "검색" },
+  { key: "arch", label: "구성도" },
   { key: "audit", label: "감사 로그", adminOnly: true },
   { key: "settings", label: "설정", adminOnly: true },
 ];
@@ -31,9 +33,9 @@ export function TopBar({
     <div className="flex items-center gap-4.5 px-5.5 py-3 border-b border-[var(--color-divider)] overflow-x-auto whitespace-nowrap">
       <button
         className="font-[var(--font-heading)] font-semibold text-[19px] tracking-[.02em]"
-        onClick={() => onNavigateView("vault")}
+        onClick={() => onNavigateView("dashboard")}
       >
-        VAULT<span className="text-[var(--color-accent)]">VIEWER</span>
+        ACCESS<span className="text-[var(--color-accent)]">LENS</span>
       </button>
       {config && <span className="tag tag-outline mono tracking-[.08em]">{config.deployment}</span>}
 

@@ -1,6 +1,12 @@
-# VaultViewer Helm Chart
+# AccessLens Helm Chart
 
-LDAP 기반 RBAC를 지원하는 시크릿/볼트 뷰어를 쿠버네티스에 배포하는 차트입니다.
+LDAP 기반 RBAC를 지원하는 AccessLens 시크릿/권한 뷰어를 쿠버네티스에 배포하는
+차트입니다. 차트 디렉토리명·릴리스 리소스 이름(`vaultviewer.fullname` 등)과
+`image.repository`는 제품명을 AccessLens로 바꾼 뒤에도 의도적으로 `vaultviewer`를
+그대로 씁니다 — 바꾸면 다음 `helm upgrade` 때 Deployment/PVC/ServiceAccount 이름이
+전부 새로 계산돼(`vaultviewer` → `vaultviewer-accesslens` 식) 기존 PVC(실제 볼트
+데이터)가 새 이름의 빈 PVC로 대체될 위험이 있기 때문입니다. 마이그레이션을
+의도적으로 하고 싶으면 PVC/Secret 이전 계획부터 세우세요.
 `local`(마운트된 디렉토리를 노트/시크릿 뷰어로 서빙)과 `cluster`(해당 네임스페이스의
 Kubernetes Secrets를 직접 관리) 두 모드를 지원합니다.
 
@@ -159,7 +165,7 @@ DB가 없어서 둘 다 파일(local 모드) 또는 메모리(cluster 모드)로
 
 `local.git.enabled: true`로 켜면 마운트된 디렉토리가 진짜 git 저장소가 되고,
 노트를 저장·삭제할 때마다 자동으로 커밋됩니다 — 커밋 author는 실제 작업한
-사용자, committer는 고정된 "VaultViewer" 서비스 계정입니다.
+사용자, committer는 고정된 "AccessLens" 서비스 계정입니다.
 
 ```yaml
 local:
@@ -187,7 +193,7 @@ local:
 
 볼트 전체의 노드/타입 있는 관계를 JSON으로 반환하는 읽기 전용
 엔드포인트입니다(로그인한 사용자라면 역할 무관, view 포함 모두 접근
-가능). 프론트엔드 그래프 뷰와 별개로, AI agent나 MCP 서버처럼 VaultViewer
+가능). 프론트엔드 그래프 뷰와 별개로, AI agent나 MCP 서버처럼 AccessLens
 바깥의 소비자가 "이 컴포넌트가 죽으면 뭐가 영향받나" 같은 질문에 답하려고
 할 때 모든 노트를 직접 읽고 프론트매터를 다시 파싱하지 않아도 되도록
 만든 API입니다. 로컬 mode/cluster mode 모두 동작(백엔드가 이미 읽는

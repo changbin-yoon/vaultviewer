@@ -13,7 +13,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// newTestServer wires up a fake VaultViewer backend: /api/login always
+// newTestServer wires up a fake AccessLens backend: /api/login always
 // succeeds and issues a fixed token, and every other route requires
 // exactly that token in the Authorization header, returning 401 otherwise.
 // loginCount lets tests assert how many times the client actually logged in.

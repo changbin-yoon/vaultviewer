@@ -98,7 +98,7 @@ function GroupTeamMapping({ config }: { config: Config | null }) {
             {rows.length === 0 && <p className="text-sm text-muted">등록된 매핑이 없습니다.</p>}
           </div>
           {error && (
-            <p className="text-sm mb-3" style={{ color: "#b3432f" }}>
+            <p className="text-sm mb-3" style={{ color: "var(--color-danger)" }}>
               {error}
             </p>
           )}

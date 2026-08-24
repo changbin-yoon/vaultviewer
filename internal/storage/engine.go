@@ -3,7 +3,7 @@
 // implement.
 package storage
 
-import "github.com/vaultviewer/vaultviewer/internal/model"
+import "github.com/accesslens/accesslens/internal/model"
 
 // VaultStorageEngine is the interface every storage backend must satisfy so
 // that controllers stay backend-agnostic.

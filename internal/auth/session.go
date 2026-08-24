@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/vaultviewer/vaultviewer/internal/model"
+	"github.com/accesslens/accesslens/internal/model"
 )
 
 // ErrSessionExpired is returned by SessionManager.Verify for a well-formed

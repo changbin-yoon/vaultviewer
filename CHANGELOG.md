@@ -1,7 +1,29 @@
 # Changelog
 
-VaultViewer의 주요 변경 사항을 최신순으로 기록합니다. 버전 번호는 Docker 이미지 태그
-(`yoochabi/vaultviewer:<version>`)이자 Helm 차트의 `appVersion`입니다.
+AccessLens(이전 이름: VaultViewer)의 주요 변경 사항을 최신순으로 기록합니다. 버전
+번호는 Docker 이미지 태그(`yoochabi/vaultviewer:<version>`)이자 Helm 차트의
+`appVersion`입니다.
+
+## 0.1.36
+
+- 제품명을 VaultViewer에서 AccessLens로 변경 — Go 모듈 경로
+  (`github.com/accesslens/accesslens`), 서버 env var 접두사(`ACCESSLENS_`), git
+  백엔드 커밋 identity, 프론트엔드 UI 텍스트/타이틀을 모두 새 이름으로 갱신.
+  이미 배포된 cluster-mesh1과의 호환을 위해 Helm 차트 디렉토리명·리소스 이름
+  (`vaultviewer.fullname` 등)과 Docker 이미지 저장소(`yoochabi/vaultviewer`),
+  기존 K8s Secret 이름(`vaultviewer-ldap`/`vaultviewer-session`), 감사 로그/
+  그룹-팀 매핑 파일명(`.vaultviewer-audit.jsonl`, `.vaultviewer-group-teams.json`)은
+  의도적으로 그대로 둠 — 자세한 이유는 `charts/vaultviewer/README.md` 상단 참고.
+- 기능 추가: 로그인 후 첫 화면을 "대시보드"로 변경 — LDAP 계정·역할·배포 환경을
+  보여주는 신원 카드와, 계정이 Vault/Trino/OPA/S3 IAM에 어떻게 연결되는지 보여주는
+  구조도(SVG 애니메이션)를 추가. Trino/OPA/S3 IAM은 아직 백엔드 연동이 없어
+  "연동 예정" 상태로만 표시(실제 데이터 없음). "구성도" 탭도 추가해 시스템 전체
+  아키텍처(LDAP 인증 → 감사 로그 → VaultStorageEngine → 로컬 파일/Git/K8s Secrets)를
+  실선/점선으로 구분해 보여줌. 기존 문서/그래프/태그/검색/감사 로그/설정 화면은
+  변경 없음(같은 REST API 그대로 사용).
+- 리디자인: 앱 전체 디자인 토큰을 AccessLens 팔레트(틸 accent)·타이포그래피
+  (Manrope/IBM Plex)로 교체하고, 기존 "블루프린트" 등록마크 모서리 장식을 제거해
+  둥근 모서리로 통일. 기능 변경 없음.
 
 ## 0.1.35
 

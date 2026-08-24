@@ -11,8 +11,8 @@ import (
 	"os"
 	"sync"
 
-	"github.com/vaultviewer/vaultviewer/internal/model"
-	"github.com/vaultviewer/vaultviewer/internal/storage"
+	"github.com/accesslens/accesslens/internal/model"
+	"github.com/accesslens/accesslens/internal/storage"
 )
 
 // MemoryRecorder implements storage.AuditRecorder, holding every entry in

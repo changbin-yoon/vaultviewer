@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/vaultviewer/vaultviewer/internal/model"
-	"github.com/vaultviewer/vaultviewer/internal/storage"
+	"github.com/accesslens/accesslens/internal/model"
+	"github.com/accesslens/accesslens/internal/storage"
 )
 
 // Engine implements storage.VaultStorageEngine rooted at a fixed local

@@ -1,7 +1,7 @@
-# VaultViewer 가이드라인
+# AccessLens 가이드라인
 
 ## 프로젝트 개요
-VaultViewer는 LDAP 기반 RBAC를 지원하고 두 가지 실행 모드(로컬 파일/컨테이너 매핑 모드 & 쿠버네티스 클러스터 모드)를 지원하는 웹 기반 시크릿/볼트 뷰어입니다.
+AccessLens(이전 이름: VaultViewer)는 LDAP 기반 RBAC를 지원하고 두 가지 실행 모드(로컬 파일/컨테이너 매핑 모드 & 쿠버네티스 클러스터 모드)를 지원하는 웹 기반 시크릿/권한 뷰어입니다. Go 모듈 경로는 `github.com/accesslens/accesslens`, 서버 env var 접두사는 `ACCESSLENS_`입니다. Helm 차트 디렉토리명(`charts/vaultviewer/`)과 리소스 이름, Docker 이미지 저장소(`yoochabi/vaultviewer`)는 이미 배포된 클러스터(cluster-mesh1)와의 호환을 위해 의도적으로 이전 이름을 유지합니다 — 바꾸기 전에 PVC/Secret 마이그레이션 계획부터 세우세요.
 
 ## 실행 모드
 1. **로컬 모드**:

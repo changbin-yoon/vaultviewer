@@ -1,6 +1,6 @@
 package auth
 
-import "github.com/vaultviewer/vaultviewer/internal/model"
+import "github.com/accesslens/accesslens/internal/model"
 
 // rolePrecedence orders roles from most to least privileged, used when a
 // user's LDAP groups map to more than one role.

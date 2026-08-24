@@ -1,5 +1,5 @@
 // Package k8s implements storage.VaultStorageEngine over the Kubernetes
-// Secrets API — used for Cluster Mode, where VaultViewer runs inside the
+// Secrets API — used for Cluster Mode, where AccessLens runs inside the
 // cluster it manages secrets for.
 //
 // Vault paths map onto Kubernetes Secrets as "secretName" (a directory of
@@ -18,8 +18,8 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 
-	"github.com/vaultviewer/vaultviewer/internal/model"
-	"github.com/vaultviewer/vaultviewer/internal/storage"
+	"github.com/accesslens/accesslens/internal/model"
+	"github.com/accesslens/accesslens/internal/storage"
 )
 
 const requestTimeout = 10 * time.Second
@@ -41,7 +41,7 @@ func New(client kubernetes.Interface, namespace string, audit storage.AuditRecor
 }
 
 // NewInCluster builds an Engine using the in-cluster service account
-// config, for when VaultViewer is deployed inside the cluster it serves.
+// config, for when AccessLens is deployed inside the cluster it serves.
 func NewInCluster(namespace string, audit storage.AuditRecorder) (*Engine, error) {
 	cfg, err := rest.InClusterConfig()
 	if err != nil {

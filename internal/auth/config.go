@@ -1,5 +1,5 @@
 // Package auth implements LDAP authentication and LDAP-group-to-role RBAC
-// for VaultViewer, kept separate from storage and audit per the project's
+// for AccessLens, kept separate from storage and audit per the project's
 // functional-separation convention.
 package auth
 
@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/vaultviewer/vaultviewer/internal/model"
+	"github.com/accesslens/accesslens/internal/model"
 )
 
 // Config configures an LDAPAuthenticator. All values are sourced from the
@@ -56,53 +56,53 @@ func (c Config) GroupBaseDN() string {
 
 // LoadConfigFromEnv builds a Config from environment variables:
 //
-//	VAULTVIEWER_LDAP_HOST          (required)
-//	VAULTVIEWER_LDAP_PORT          (default 389)
-//	VAULTVIEWER_LDAP_TLS           (default false)
-//	VAULTVIEWER_LDAP_BASE_DN       (required, e.g. "dc=example,dc=com")
-//	VAULTVIEWER_LDAP_USER_OU       (default "ou=users")
-//	VAULTVIEWER_LDAP_GROUP_OU      (default "ou=groups")
-//	VAULTVIEWER_LDAP_BIND_DN       (required, service bind DN for search)
-//	VAULTVIEWER_LDAP_BIND_PASSWORD (required)
-//	VAULTVIEWER_LDAP_GROUP_ADM     (default "adm", comma-separated for multiple groups)
-//	VAULTVIEWER_LDAP_GROUP_DEV     (default "dev", comma-separated for multiple groups)
-//	VAULTVIEWER_LDAP_GROUP_VIEW    (default "view", comma-separated for multiple groups)
+//	ACCESSLENS_LDAP_HOST          (required)
+//	ACCESSLENS_LDAP_PORT          (default 389)
+//	ACCESSLENS_LDAP_TLS           (default false)
+//	ACCESSLENS_LDAP_BASE_DN       (required, e.g. "dc=example,dc=com")
+//	ACCESSLENS_LDAP_USER_OU       (default "ou=users")
+//	ACCESSLENS_LDAP_GROUP_OU      (default "ou=groups")
+//	ACCESSLENS_LDAP_BIND_DN       (required, service bind DN for search)
+//	ACCESSLENS_LDAP_BIND_PASSWORD (required)
+//	ACCESSLENS_LDAP_GROUP_ADM     (default "adm", comma-separated for multiple groups)
+//	ACCESSLENS_LDAP_GROUP_DEV     (default "dev", comma-separated for multiple groups)
+//	ACCESSLENS_LDAP_GROUP_VIEW    (default "view", comma-separated for multiple groups)
 func LoadConfigFromEnv() (Config, error) {
 	cfg := Config{
-		Host:         os.Getenv("VAULTVIEWER_LDAP_HOST"),
+		Host:         os.Getenv("ACCESSLENS_LDAP_HOST"),
 		Port:         389,
-		UseTLS:       os.Getenv("VAULTVIEWER_LDAP_TLS") == "true",
-		BaseDN:       os.Getenv("VAULTVIEWER_LDAP_BASE_DN"),
-		UserOU:       envOr("VAULTVIEWER_LDAP_USER_OU", "ou=users"),
-		GroupOU:      envOr("VAULTVIEWER_LDAP_GROUP_OU", "ou=groups"),
-		BindDN:       os.Getenv("VAULTVIEWER_LDAP_BIND_DN"),
-		BindPassword: os.Getenv("VAULTVIEWER_LDAP_BIND_PASSWORD"),
+		UseTLS:       os.Getenv("ACCESSLENS_LDAP_TLS") == "true",
+		BaseDN:       os.Getenv("ACCESSLENS_LDAP_BASE_DN"),
+		UserOU:       envOr("ACCESSLENS_LDAP_USER_OU", "ou=users"),
+		GroupOU:      envOr("ACCESSLENS_LDAP_GROUP_OU", "ou=groups"),
+		BindDN:       os.Getenv("ACCESSLENS_LDAP_BIND_DN"),
+		BindPassword: os.Getenv("ACCESSLENS_LDAP_BIND_PASSWORD"),
 		GroupRoleMap: map[string]model.Role{},
 	}
-	addGroupRoles(cfg.GroupRoleMap, "VAULTVIEWER_LDAP_GROUP_ADM", "adm", model.RoleAdmin)
-	addGroupRoles(cfg.GroupRoleMap, "VAULTVIEWER_LDAP_GROUP_DEV", "dev", model.RoleDev)
-	addGroupRoles(cfg.GroupRoleMap, "VAULTVIEWER_LDAP_GROUP_VIEW", "view", model.RoleView)
+	addGroupRoles(cfg.GroupRoleMap, "ACCESSLENS_LDAP_GROUP_ADM", "adm", model.RoleAdmin)
+	addGroupRoles(cfg.GroupRoleMap, "ACCESSLENS_LDAP_GROUP_DEV", "dev", model.RoleDev)
+	addGroupRoles(cfg.GroupRoleMap, "ACCESSLENS_LDAP_GROUP_VIEW", "view", model.RoleView)
 
-	if portStr := os.Getenv("VAULTVIEWER_LDAP_PORT"); portStr != "" {
+	if portStr := os.Getenv("ACCESSLENS_LDAP_PORT"); portStr != "" {
 		port, err := strconv.Atoi(portStr)
 		if err != nil {
-			return Config{}, fmt.Errorf("parse VAULTVIEWER_LDAP_PORT: %w", err)
+			return Config{}, fmt.Errorf("parse ACCESSLENS_LDAP_PORT: %w", err)
 		}
 		cfg.Port = port
 	}
 
 	var missing []string
 	if cfg.Host == "" {
-		missing = append(missing, "VAULTVIEWER_LDAP_HOST")
+		missing = append(missing, "ACCESSLENS_LDAP_HOST")
 	}
 	if cfg.BaseDN == "" {
-		missing = append(missing, "VAULTVIEWER_LDAP_BASE_DN")
+		missing = append(missing, "ACCESSLENS_LDAP_BASE_DN")
 	}
 	if cfg.BindDN == "" {
-		missing = append(missing, "VAULTVIEWER_LDAP_BIND_DN")
+		missing = append(missing, "ACCESSLENS_LDAP_BIND_DN")
 	}
 	if cfg.BindPassword == "" {
-		missing = append(missing, "VAULTVIEWER_LDAP_BIND_PASSWORD")
+		missing = append(missing, "ACCESSLENS_LDAP_BIND_PASSWORD")
 	}
 	if len(missing) > 0 {
 		return Config{}, fmt.Errorf("missing required env vars: %v", missing)

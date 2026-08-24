@@ -180,7 +180,7 @@ export function Tree({
             onChange={(e) => setNewNamespaceName(e.target.value)}
             autoFocus
           />
-          {namespaceError && <p className="text-xs mb-1.5" style={{ color: "#b3432f" }}>{namespaceError}</p>}
+          {namespaceError && <p className="text-xs mb-1.5" style={{ color: "var(--color-danger)" }}>{namespaceError}</p>}
           <div className="flex gap-1.5">
             <button className="btn btn-primary text-xs" disabled={busy || !newNamespaceName.trim()} onClick={submitNamespace}>
               만들기
