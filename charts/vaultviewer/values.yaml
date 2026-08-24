@@ -3,7 +3,7 @@
 
 image:
   repository: yoochabi/vaultviewer
-  tag: "0.1.39"
+  tag: "0.1.40"
   pullPolicy: IfNotPresent
 
 imagePullSecrets: []

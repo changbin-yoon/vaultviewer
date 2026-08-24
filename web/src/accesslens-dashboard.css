@@ -171,7 +171,7 @@ svg.al-diagram { width: 100%; height: auto; }
   display: flex; justify-content: space-between; gap: 10px; font-size: 0.8rem;
   border-top: 1px solid var(--al-border); padding-top: 8px;
 }
-.al-perm-card .al-row dt { color: var(--al-text-muted); }
+.al-perm-card .al-row dt { color: var(--al-text-muted); flex-shrink: 0; white-space: nowrap; }
 .al-perm-card .al-row dd { margin: 0; font-family: "IBM Plex Mono", monospace; text-align: right; color: var(--al-text); }
 
 .al-perm-card dl { margin: 0; display: flex; flex-direction: column; gap: 8px; }

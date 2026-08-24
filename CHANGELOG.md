@@ -4,6 +4,12 @@ AccessLens(이전 이름: VaultViewer)의 주요 변경 사항을 최신순으�
 번호는 Docker 이미지 태그(`yoochabi/vaultviewer:<version>`)이자 Helm 차트의
 `appVersion`입니다.
 
+## 0.1.40
+
+- 버그 수정: 대시보드 권한 카드에서 라벨이 길면(예: "허용 작업") 좁은 열 안에서
+  글자 단위로 줄바꿈되던 문제 — 실배포 확인 중 OPA 카드에서 발견. `.al-row dt`에
+  `flex-shrink: 0`/`white-space: nowrap` 추가.
+
 ## 0.1.39
 
 - 기능 추가: OPA 대시보드 카드 — `internal/opa` 패키지로 OPA의 grants
