@@ -7,7 +7,7 @@ image:
   # 채우면 harbor.internal:5000/yoochabi/vaultviewer:<tag>를 사용.
   registry: ""
   repository: yoochabi/vaultviewer
-  tag: "0.1.48"
+  tag: "0.1.49"
   pullPolicy: IfNotPresent
 
 # airgapped 클러스터의 프라이빗 레지스트리가 인증을 요구하면 여기에

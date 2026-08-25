@@ -308,6 +308,18 @@ function S3IamCard({ s3iam }: { s3iam: S3IamIntegration }) {
             <dd>{s3iam.buckets.join(", ")}</dd>
           </div>
         )}
+        {s3iam.accessKeyId && (
+          <div className="al-row">
+            <dt>Access Key</dt>
+            <dd>{s3iam.accessKeyId}</dd>
+          </div>
+        )}
+        {s3iam.expiresAt && (
+          <div className="al-row">
+            <dt>만료</dt>
+            <dd>{new Date(s3iam.expiresAt).toLocaleTimeString()}</dd>
+          </div>
+        )}
       </dl>
     </div>
   );

@@ -16,6 +16,7 @@ const stsSuccessResponse = `<?xml version="1.0" encoding="UTF-8"?>
     <Credentials>
       <AccessKeyId>TESTACCESSKEY</AccessKeyId>
       <SecretAccessKey>testsecret</SecretAccessKey>
+      <Expiration>2026-08-26T12:00:00Z</Expiration>
     </Credentials>
   </AssumeRoleWithLDAPIdentityResult>
 </AssumeRoleWithLDAPIdentityResponse>`
@@ -33,12 +34,18 @@ func TestCheckConnectionSuccess(t *testing.T) {
 	defer srv.Close()
 
 	c := NewClient(Config{Endpoint: strings.TrimPrefix(srv.URL, "http://"), LDAPUsername: "svc", LDAPPassword: "secret"})
-	connected, err := c.CheckConnection(context.Background())
+	creds, err := c.CheckConnection(context.Background())
 	if err != nil {
 		t.Fatalf("CheckConnection: %v", err)
 	}
-	if !connected {
-		t.Errorf("expected connected=true")
+	if creds == nil {
+		t.Fatalf("expected non-nil credentials")
+	}
+	if creds.AccessKeyID != "TESTACCESSKEY" {
+		t.Errorf("expected AccessKeyID %q, got %q", "TESTACCESSKEY", creds.AccessKeyID)
+	}
+	if creds.Expiration.IsZero() {
+		t.Errorf("expected a parsed expiration, got zero value")
 	}
 }
 
@@ -49,12 +56,12 @@ func TestCheckConnectionBadCredentials(t *testing.T) {
 	defer srv.Close()
 
 	c := NewClient(Config{Endpoint: strings.TrimPrefix(srv.URL, "http://"), LDAPUsername: "svc", LDAPPassword: "wrong"})
-	connected, err := c.CheckConnection(context.Background())
+	creds, err := c.CheckConnection(context.Background())
 	if err != nil {
 		t.Fatalf("CheckConnection: %v", err)
 	}
-	if connected {
-		t.Errorf("expected connected=false for a non-2xx response")
+	if creds != nil {
+		t.Errorf("expected nil credentials for a non-2xx response, got %+v", creds)
 	}
 }
 

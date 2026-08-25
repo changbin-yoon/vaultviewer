@@ -67,16 +67,28 @@ func registerIntegrationRoutes(mux *http.ServeMux, d Deps) {
 			json.NewEncoder(w).Encode(map[string]bool{"enabled": false})
 			return
 		}
-		connected, err := d.S3IamClient.CheckConnection(r.Context())
+		creds, err := d.S3IamClient.CheckConnection(r.Context())
 		if err != nil {
-			connected = false
+			creds = nil
 		}
-		json.NewEncoder(w).Encode(map[string]any{
+		resp := map[string]any{
 			"enabled":   true,
-			"connected": connected,
+			"connected": creds != nil,
 			"role":      d.S3Iam.RoleMap[user.Role],
 			"buckets":   d.S3Iam.Buckets,
-		})
+		}
+		// accessKeyId/expiresAt are the temporary STS session's own
+		// identifier and expiry — not a secret on their own (no secret key
+		// or session token is ever parsed/returned, see internal/s3iam.
+		// Credentials) — shown as proof the check produced a real, live
+		// session, not just that the endpoint answered.
+		if creds != nil {
+			resp["accessKeyId"] = creds.AccessKeyID
+			if !creds.Expiration.IsZero() {
+				resp["expiresAt"] = creds.Expiration
+			}
+		}
+		json.NewEncoder(w).Encode(resp)
 	}))
 
 	mux.HandleFunc("GET /api/config", auth.RequireAuth(d.Sessions, func(w http.ResponseWriter, r *http.Request, _ model.User) {

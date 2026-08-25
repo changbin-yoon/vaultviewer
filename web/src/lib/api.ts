@@ -142,6 +142,12 @@ export interface S3IamIntegration {
   connected?: boolean;
   role?: string;
   buckets?: string[];
+  // The temporary STS session's own access key ID + expiry (no secret key
+  // or session token — those are never sent to the frontend). Proof the
+  // connectivity check produced a real, live session, not just that the
+  // endpoint answered. Present only when connected.
+  accessKeyId?: string;
+  expiresAt?: string;
 }
 
 export function getS3IamIntegration() {

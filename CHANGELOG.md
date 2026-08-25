@@ -4,6 +4,14 @@ AccessLens(이전 이름: VaultViewer)의 주요 변경 사항을 최신순으�
 번호는 Docker 이미지 태그(`yoochabi/vaultviewer:<version>`)이자 Helm 차트의
 `appVersion`입니다.
 
+## 0.1.49
+
+- S3 IAM 대시보드 카드에 연결 확인 시 발급된 임시 STS 세션의 Access Key ID와
+  만료 시각을 표시. `internal/s3iam.Client.CheckConnection`이 이미 파싱하고
+  버리던 값을 노출한 것 — Secret Key/Session Token은 여전히 파싱도 안 하고
+  전달도 안 함(Access Key ID만으로는 실제 인증에 쓸 수 없어 어느 role이든
+  노출해도 안전).
+
 ## 0.1.48
 
 - 대시보드 아바타 개선: 팀 그룹이 없는 계정(예: `ycb`)의 아바타가 의미 없는
