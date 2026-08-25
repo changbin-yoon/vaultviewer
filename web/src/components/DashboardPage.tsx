@@ -323,11 +323,17 @@ export function DashboardPage({
   onNavigateView: (v: View) => void;
 }) {
   const vaultSub = config ? `${config.mode} 모드` : "";
-  // The avatar shows the primary team's name when the account's LDAP
-  // groups resolve one (e.g. "bi-adm" -> "BI") — falls back to username
-  // initials for accounts with no team-scoped groups (e.g. plain "adm").
+  // The avatar shows an org-level mark rather than username initials: the
+  // primary team's name when the account's LDAP groups resolve one (e.g.
+  // "bi-adm" -> "BI"), otherwise the department/소속 (e.g. "플랫폼운영팀" ->
+  // "플랫") for accounts whose groups don't follow that convention. Only
+  // falls back to username initials if neither is available.
   const primaryTeam = session.teams[0]?.team;
-  const avatarLabel = primaryTeam ? primaryTeam.toUpperCase() : session.username.slice(0, 2);
+  const avatarLabel = primaryTeam
+    ? primaryTeam.toUpperCase()
+    : session.department
+      ? session.department.slice(0, 2)
+      : session.username.slice(0, 2);
   const { trino, opa, s3iam } = useIntegrations();
 
   const integratedNames = [

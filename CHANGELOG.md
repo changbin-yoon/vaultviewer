@@ -4,6 +4,13 @@ AccessLens(이전 이름: VaultViewer)의 주요 변경 사항을 최신순으�
 번호는 Docker 이미지 태그(`yoochabi/vaultviewer:<version>`)이자 Helm 차트의
 `appVersion`입니다.
 
+## 0.1.48
+
+- 대시보드 아바타 개선: 팀 그룹이 없는 계정(예: `ycb`)의 아바타가 의미 없는
+  계정명 이니셜("yc") 대신 소속(department, 예: "플랫폼운영팀" → "플랫")을
+  보여줌. 팀 그룹이 있는 계정(예: `bi-adm`)은 기존처럼 팀 이름("BI")이
+  우선.
+
 ## 0.1.47
 
 - 기능 추가: 대시보드에 "팀별 권한" 표시. LDAP 그룹 CN이 `<팀>-<역할>`
