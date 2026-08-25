@@ -13,6 +13,11 @@
 {{- fail "Set backup.existingSecret so the S3 access/secret key can be provided — AccessLens refuses to hardcode it." -}}
 {{- end -}}
 {{- end -}}
+{{- if .Values.autoscaling.enabled -}}
+{{- if and (eq .Values.mode "local") .Values.local.persistence.enabled -}}
+{{- fail "autoscaling.enabled isn't compatible with mode: local + local.persistence.enabled — a ReadWriteOnce PVC can only be mounted by one pod at a time. Use mode: cluster, or disable local.persistence if your storage supports ReadWriteMany." -}}
+{{- end -}}
+{{- end -}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -95,6 +100,10 @@ spec:
             - name: {{ printf "ACCESSLENS_LDAP_GROUP_%s" ($role | upper) }}
               {{- /* 값이 리스트면 콤마로 합쳐서 하나의 env var로 전달 (여러 LDAP 그룹 -> 같은 역할) */}}
               value: {{ (kindIs "slice" $groups) | ternary (join "," $groups) $groups | quote }}
+            {{- end }}
+            {{- if .Values.ldap.groupSearchFilter }}
+            - name: ACCESSLENS_LDAP_GROUP_SEARCH_FILTER
+              value: {{ .Values.ldap.groupSearchFilter | quote }}
             {{- end }}
             {{- if .Values.session.existingSecret }}
             - name: ACCESSLENS_SESSION_SECRET
@@ -187,6 +196,14 @@ spec:
           volumeMounts:
             - name: data
               mountPath: {{ .Values.local.persistence.mountPath }}
+          {{- end }}
+          {{- if .Values.startupProbe.enabled }}
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            failureThreshold: {{ .Values.startupProbe.failureThreshold }}
+            periodSeconds: {{ .Values.startupProbe.periodSeconds }}
           {{- end }}
           livenessProbe:
             httpGet:

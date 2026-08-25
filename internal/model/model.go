@@ -27,6 +27,18 @@ func (r Role) IsAdmin() bool {
 	return r == RoleAdmin
 }
 
+// TeamGrant is one LDAP group membership that grants a role scoped to a
+// named team — parsed from a group CN of the form "<team>-<role>" or
+// "<team>_<role>" (e.g. "bi-adm" -> {Team: "bi", Role: RoleAdmin}; see
+// auth.ResolveTeams). Purely informational for the UI ("which team(s) grant
+// me what") — separate from the single overall Role above, which
+// auth.ResolveRole computes as the highest-precedence role across every
+// matching group (team-scoped or not) and is what actually gates RBAC.
+type TeamGrant struct {
+	Team string
+	Role Role
+}
+
 // User represents an authenticated LDAP user and their resolved role.
 type User struct {
 	Username string
@@ -34,6 +46,10 @@ type User struct {
 	// Department is the LDAP "o" (organizationName) attribute, shown in the
 	// UI as the user's affiliation. Empty if the directory entry doesn't set it.
 	Department string
+	// Teams is every team-scoped role grant found among the user's LDAP
+	// groups (see TeamGrant). Empty for accounts whose groups don't follow
+	// the "<team>-<role>" naming convention (e.g. a bare "adm" group).
+	Teams []TeamGrant
 }
 
 // FileItem represents a single node (file or directory) in the vault tree.

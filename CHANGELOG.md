@@ -4,6 +4,53 @@ AccessLens(이전 이름: VaultViewer)의 주요 변경 사항을 최신순으�
 번호는 Docker 이미지 태그(`yoochabi/vaultviewer:<version>`)이자 Helm 차트의
 `appVersion`입니다.
 
+## 0.1.47
+
+- 기능 추가: 대시보드에 "팀별 권한" 표시. LDAP 그룹 CN이 `<팀>-<역할>`
+  또는 `<팀>_<역할>` 패턴(예: `bi-adm`)이면 백엔드(`auth.ResolveTeams`)가
+  이를 팀/역할로 분리해 `model.User.Teams`에 담고, 세션 토큰·`/api/login`·
+  `/api/me`를 거쳐 프론트엔드까지 전달됩니다. 대시보드 아바타는 이제
+  (팀이 있으면) 팀 이름을, 없으면 기존처럼 계정 이니셜을 보여주고, ID
+  카드 하단에 소속된 팀마다 역할 배지 + 권한 설명을 나열합니다. 기존
+  전역 adm/dev/view 역할·RBAC 판정 로직은 그대로(순수 표시용 추가 정보).
+- cluster-mesh1 배포 설정: MinIO IAM 테스트용으로 이미 존재하던
+  bi/ml/ops × adm/dev/view 9개 LDAP 그룹을 AccessLens 자체 로그인
+  `groupRoleMap`에도 연결 — 이제 이 9개 계정으로 AccessLens에 직접
+  로그인해 팀별 권한 표시를 확인할 수 있음.
+
+## 0.1.46
+
+- 기능 추가: LDAP 그룹 검색 필터를 템플릿으로 설정 가능하게 변경
+  (`ldap.groupSearchFilter`, Trino의 `ldap.group-search-filter`와 동일한
+  목적). 비워두면 기존 필터(`groupOfNames` `member` 매칭)와 완전히
+  동일하게 동작 — 기존 배포는 영향 없음. posixGroup(`memberUid`),
+  groupOfUniqueNames(`uniqueMember`), AD 중첩 그룹 등 다른 LDAP 스키마도
+  값만 바꿔서 지원 가능.
+- UI 디자인 시스템 리뉴얼("볼트 콘솔" 방향) — 그래파이트/페이퍼 중립
+  베이스 + 인디고 시그널 악센트로 전환, 카드 radius 축소(14px→8px)와
+  그림자 제거(기본은 헤어라인 테두리만, 그림자는 모달/팝오버 전용으로
+  예약). `RoleTag`를 색상 pill에서 등급(view<dev<adm) 눈금 3칸짜리
+  "클리어런스 바"로 교체 — 전역 컴포넌트라 대시보드/설정/감사 로그 등
+  역할이 표시되는 모든 화면에 일괄 반영됨. 폰트(Manrope/IBM Plex)는
+  유지.
+- API 서버 코드 구조 정리 — `cmd/server/main.go`에 있던 모든 라우팅을
+  새 `internal/api` 패키지로 이전, Go 1.26 `http.ServeMux` 메서드 패턴
+  라우팅 사용(`"GET /api/tree"` 등). 순수 이동이지만 부수 효과로 잘못된
+  메서드 요청이 이제 자동으로 405를 반환함.
+- `/api/file` PUT/POST에 요청 본문 크기 제한 추가(기본 20MB,
+  `ACCESSLENS_MAX_BODY_BYTES`로 조절) — 초과 시 413.
+- MCP 서버에 쓰기 도구 추가: `save_note`(생성/수정 겸용 — REST가 둘을
+  구분하지 않음), `delete_note`, `rename_note`. 권한 검사는 전부 REST의
+  기존 RBAC 미들웨어에 위임, MCP 서버 자체는 인가 로직을 갖지 않음.
+  기동 시 인증된 계정명을 로그로 남겨 여러 에이전트가 계정을 공유하는
+  실수를 바로 알아챌 수 있게 함.
+- Helm 차트: cluster 모드 Secret RBAC에서 실제로 쓰지 않는 `watch`/
+  `patch` 동사 제거(`get`/`list`/`create`/`update`/`delete`만 남김).
+  `startupProbe`/`networkPolicy`/`podDisruptionBudget`/`autoscaling`
+  템플릿 추가(전부 기본 비활성 — 기존 배포 렌더링 결과 무변화).
+  `values.schema.json` 추가로 `helm lint`/`helm template` 단계에서 값
+  검증.
+
 ## 0.1.45
 
 - 기능 추가: airgapped 클러스터 배포 지원.

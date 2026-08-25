@@ -1,11 +1,12 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import * as api from "./api";
-import type { Role } from "./api";
+import type { Role, TeamGrant } from "./api";
 
 interface Session {
   username: string;
   role: Role;
   department: string;
+  teams: TeamGrant[];
 }
 
 interface AuthState {
@@ -36,7 +37,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = async (username: string, password: string) => {
     const res = await api.login(username, password);
     api.setToken(res.token);
-    setSession({ username: res.username, role: res.role, department: res.department });
+    setSession({ username: res.username, role: res.role, department: res.department, teams: res.teams });
   };
 
   const logout = () => {

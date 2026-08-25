@@ -1,0 +1,172 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "title": "AccessLens (chart name: vaultviewer) values",
+  "type": "object",
+  "required": ["mode", "image", "ldap"],
+  "properties": {
+    "mode": {
+      "type": "string",
+      "enum": ["local", "cluster"],
+      "description": "local: mount a directory. cluster: browse/edit Kubernetes Secrets in cluster.namespace."
+    },
+    "replicaCount": { "type": "integer", "minimum": 0 },
+    "deploymentLabel": { "type": "string" },
+    "image": {
+      "type": "object",
+      "required": ["repository", "tag"],
+      "properties": {
+        "registry": { "type": "string" },
+        "repository": { "type": "string" },
+        "tag": { "type": "string" },
+        "pullPolicy": { "type": "string", "enum": ["Always", "IfNotPresent", "Never"] }
+      }
+    },
+    "imagePullSecrets": { "type": "array" },
+    "local": {
+      "type": "object",
+      "properties": {
+        "persistence": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "existingClaim": { "type": "string" },
+            "storageClass": { "type": "string" },
+            "accessMode": { "type": "string" },
+            "size": { "type": "string" },
+            "mountPath": { "type": "string" }
+          }
+        },
+        "git": {
+          "type": "object",
+          "properties": { "enabled": { "type": "boolean" } }
+        }
+      }
+    },
+    "cluster": {
+      "type": "object",
+      "properties": {
+        "namespace": { "type": "string" },
+        "rbac": {
+          "type": "object",
+          "properties": { "create": { "type": "boolean" } }
+        }
+      }
+    },
+    "ldap": {
+      "type": "object",
+      "required": ["host", "baseDN", "bindDN"],
+      "properties": {
+        "host": { "type": "string", "minLength": 1 },
+        "port": { "type": "integer" },
+        "tls": { "type": "boolean" },
+        "baseDN": { "type": "string", "minLength": 1 },
+        "userOU": { "type": "string" },
+        "groupOU": { "type": "string" },
+        "bindDN": { "type": "string", "minLength": 1 },
+        "existingSecret": { "type": "string" },
+        "existingSecretKey": { "type": "string" },
+        "bindPasswordValue": { "type": "string" },
+        "groupRoleMap": { "type": "object" },
+        "groupSearchFilter": {
+          "type": "string",
+          "description": "Go template producing the LDAP group-search filter; fields {{.UserDN}}, {{.UID}}. Empty = built-in default."
+        }
+      }
+    },
+    "session": {
+      "type": "object",
+      "properties": {
+        "existingSecret": { "type": "string" },
+        "existingSecretKey": { "type": "string" },
+        "ttlHours": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "backup": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "endpoint": { "type": "string" },
+        "bucket": { "type": "string" },
+        "region": { "type": "string" },
+        "useSSL": { "type": "boolean" },
+        "prefix": { "type": "string" },
+        "intervalMinutes": { "type": "integer", "minimum": 1 },
+        "existingSecret": { "type": "string" },
+        "existingSecretAccessKeyKey": { "type": "string" },
+        "existingSecretSecretKeyKey": { "type": "string" }
+      }
+    },
+    "trino": { "type": "object" },
+    "opa": { "type": "object" },
+    "s3iam": { "type": "object" },
+    "service": {
+      "type": "object",
+      "properties": {
+        "type": { "type": "string", "enum": ["ClusterIP", "NodePort", "LoadBalancer"] },
+        "port": { "type": "integer" },
+        "nodePort": {}
+      }
+    },
+    "cors": {
+      "type": "object",
+      "properties": { "origin": { "type": "string" } }
+    },
+    "ingress": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "className": { "type": "string" },
+        "annotations": { "type": "object" },
+        "hosts": { "type": "array" },
+        "tls": { "type": "array" }
+      }
+    },
+    "serviceAccount": {
+      "type": "object",
+      "properties": {
+        "create": { "type": "boolean" },
+        "name": { "type": "string" },
+        "annotations": { "type": "object" }
+      }
+    },
+    "podAnnotations": { "type": "object" },
+    "podSecurityContext": { "type": "object" },
+    "securityContext": { "type": "object" },
+    "resources": { "type": "object" },
+    "nodeSelector": { "type": "object" },
+    "tolerations": { "type": "array" },
+    "affinity": { "type": "object" },
+    "startupProbe": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "failureThreshold": { "type": "integer", "minimum": 1 },
+        "periodSeconds": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "networkPolicy": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "policyTypes": { "type": "array", "items": { "type": "string" } },
+        "ingress": { "type": "array" }
+      }
+    },
+    "podDisruptionBudget": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "minAvailable": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "autoscaling": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "minReplicas": { "type": "integer", "minimum": 1 },
+        "maxReplicas": { "type": "integer", "minimum": 1 },
+        "targetCPUUtilizationPercentage": { "type": "integer", "minimum": 1, "maximum": 100 }
+      }
+    }
+  }
+}

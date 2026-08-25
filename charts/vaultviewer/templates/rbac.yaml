@@ -8,8 +8,15 @@ metadata:
     {{- include "vaultviewer.labels" . | nindent 4 }}
 rules:
   - apiGroups: [""]
+    # Matches exactly what internal/storage/k8s.Engine calls against the
+    # Secrets API (get/list/create/update/delete) — no watch or patch, so
+    # they're not granted. Full-namespace scope (no resourceNames) is
+    # intentional: browsing/editing arbitrary secrets in the namespace is
+    # cluster mode's actual product function; AccessLens's own RBAC layer
+    # (adm/dev/view) tiers what each caller can do with that access, not
+    # this Role.
     resources: ["secrets"]
-    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+    verbs: ["get", "list", "create", "update", "delete"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding

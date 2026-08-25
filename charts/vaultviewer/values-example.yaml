@@ -48,6 +48,14 @@ ldap:
     adm: "adm"
     dev: "dev"
     view: "view"
+  # Group CNs shaped like "<team>-<role>" (e.g. "bi-adm") also get parsed
+  # into a per-team breakdown shown on the dashboard — no extra config
+  # needed for that display, but the group still needs to be listed above
+  # for it to actually grant a role.
+  #
+  # Leave groupSearchFilter empty unless your directory's group-membership
+  # schema differs from groupOfNames' "member" attribute:
+  # groupSearchFilter: "(&(objectClass=posixGroup)(memberUid={{.UID}}))"
 
 session:
   existingSecret: vaultviewer-session

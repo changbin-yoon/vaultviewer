@@ -33,6 +33,23 @@ Kubernetes Secrets를 직접 관리) 두 모드를 지원합니다.
 
    사용자가 나열된 그룹 중 하나에라도 속해 있으면 해당 역할이 부여되고, 여러 역할에
    걸쳐 있으면(adm과 view 둘 다) 더 높은 권한(adm)이 적용됩니다.
+
+   그룹 CN이 `<팀>-<역할>` 또는 `<팀>_<역할>` 패턴(예: `bi-adm`, `ml-dev`)이면
+   대시보드가 자동으로 "소속 팀 및 권한"을 팀별로 나눠 보여줍니다 — `groupRoleMap`과는
+   별개의 순수 표시용 파싱이라 추가 설정이 필요 없습니다. 다만 실제로 그 그룹이
+   `adm`/`dev`/`view` 권한을 갖게 하려면 여전히 `groupRoleMap`에도 등록해야 합니다
+   (팀 이름 파싱은 "표시"만, 권한 부여는 `groupRoleMap`이 담당).
+
+   그룹을 찾는 LDAP 검색 필터 자체(기본은 `groupOfNames`의 `member` 매칭)를 바꿔야
+   한다면 `ldap.groupSearchFilter`를 템플릿으로 설정하세요 — Trino의
+   `ldap.group-search-filter`와 같은 목적입니다. 비워두면 기존 필터를 그대로 쓰므로
+   안 건드리면 동작이 바뀌지 않습니다.
+
+   ```yaml
+   ldap:
+     # posixGroup(memberUid) 스키마 예시 — {{.UserDN}}/{{.UID}} 사용 가능
+     groupSearchFilter: "(&(objectClass=posixGroup)(memberUid={{.UID}}))"
+   ```
 2. **이미지** — `docker buildx build --platform linux/amd64 -t <repo>/vaultviewer:<tag> --push .`
    로 빌드한 뒤 `image.repository`/`image.tag`에 지정하세요. 클러스터 노드 아키텍처와
    빌드 머신 아키텍처가 다르면(예: Apple Silicon Mac → amd64 노드) 반드시
@@ -262,9 +279,44 @@ curl -s http://<host>/api/graph -H "Authorization: Bearer $TOKEN" | jq
   ReadWriteOnce PVC이므로 롤아웃 시 새 파드가 볼륨을 못 붙는 문제를 피하려고
   Deployment 전략을 `Recreate`로 고정해뒀습니다.
 - **cluster**: `cluster.namespace`(비우면 릴리스 네임스페이스)의 Secret을 관리합니다.
-  파드의 ServiceAccount에 해당 네임스페이스 Secret에 대한 get/list/watch/create/
-  update/patch/delete 권한을 주는 Role/RoleBinding이 `cluster.rbac.create=true`일 때
-  자동 생성됩니다. Kubernetes Secret은 "빈 네임스페이스"라는 개념이 없어서, 첫 시크릿
-  키를 추가하기 전까지는 그 네임스페이스 자체가 트리에 나타나지 않습니다.
+  파드의 ServiceAccount에 해당 네임스페이스 Secret에 대한 get/list/create/update/
+  delete 권한을 주는 Role/RoleBinding이 `cluster.rbac.create=true`일 때 자동
+  생성됩니다(실제로 호출하는 동사만 부여 — watch/patch는 안 씀). Kubernetes Secret은
+  "빈 네임스페이스"라는 개념이 없어서, 첫 시크릿 키를 추가하기 전까지는 그
+  네임스페이스 자체가 트리에 나타나지 않습니다.
+
+## 네이티브 쿠버네티스 리소스 (전부 기본 비활성)
+
+기존 배포에 영향 없이 필요할 때만 켜는 옵트인 값들입니다 — 아무것도 안 건드리면
+`helm upgrade`해도 렌더링 결과가 그대로입니다.
+
+```yaml
+startupProbe:
+  enabled: true   # 콜드 PVC 마운트처럼 기동이 느릴 수 있을 때, /healthz 기반
+
+networkPolicy:
+  enabled: true   # 기본은 http 포트로의 인그레스를 전부 허용(=정책 없을 때와 동일).
+  ingress:        # 실제로 제한하려면 이 rules를 채우세요.
+    - from:
+        - namespaceSelector: {}
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1   # replicaCount(또는 autoscaling.minReplicas)가 2 이상이어야 함 —
+                     # 1개짜리 배포에서 켜면 노드 드레인이 막혀서 helm이 렌더링을 거부합니다.
+
+autoscaling:
+  enabled: true      # mode: cluster에서만 의미 있음 — mode: local + PVC 조합은
+  minReplicas: 1     # ReadWriteOnce라 replica 2개 이상을 못 붙이므로 렌더링이 거부됩니다.
+  maxReplicas: 3
+  targetCPUUtilizationPercentage: 80
+```
+
+## 값 검증 (`values.schema.json`)
+
+`helm lint`/`helm template`/`helm install` 시점에 `mode`, `image.*`,
+`ldap.host`/`baseDN`/`bindDN` 등 필수 값의 존재 여부와 타입을 미리 검사합니다.
+빈 `values.yaml`을 그대로 쓰면(원래도 배포용이 아닌 플레이스홀더) 여기서 바로
+에러가 나는 게 정상입니다 — `values-example.yaml`을 복사해서 채우세요.
 
 전체 값 목록과 설명은 [`values.yaml`](./values.yaml)의 주석을 참고하세요.

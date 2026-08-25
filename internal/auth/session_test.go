@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"reflect"
 	"testing"
 	"time"
 
@@ -20,7 +21,28 @@ func TestSessionManagerIssueAndVerify(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Verify: %v", err)
 	}
-	if *got != want {
+	if !reflect.DeepEqual(*got, want) {
+		t.Fatalf("got %+v, want %+v", *got, want)
+	}
+}
+
+func TestSessionManagerRoundTripsTeamGrants(t *testing.T) {
+	sm := NewSessionManager([]byte("test-secret"), time.Minute)
+	want := model.User{
+		Username: "bi-adm",
+		Role:     model.RoleAdmin,
+		Teams:    []model.TeamGrant{{Team: "bi", Role: model.RoleAdmin}},
+	}
+
+	token, err := sm.Issue(want)
+	if err != nil {
+		t.Fatalf("Issue: %v", err)
+	}
+	got, err := sm.Verify(token)
+	if err != nil {
+		t.Fatalf("Verify: %v", err)
+	}
+	if !reflect.DeepEqual(*got, want) {
 		t.Fatalf("got %+v, want %+v", *got, want)
 	}
 }

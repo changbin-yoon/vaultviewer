@@ -1,9 +1,11 @@
 package auth
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"net"
+	"text/template"
 	"time"
 
 	goldap "github.com/go-ldap/ldap/v3"
@@ -34,17 +36,25 @@ type Authenticator interface {
 // service account to locate the user's DN and group memberships, then
 // binds as that DN with the supplied password to verify credentials.
 type LDAPAuthenticator struct {
-	cfg   Config
-	teams teams.Store
+	cfg             Config
+	teams           teams.Store
+	groupFilterTmpl *template.Template
 }
 
 var _ Authenticator = (*LDAPAuthenticator)(nil)
 
 // NewLDAPAuthenticator constructs an LDAPAuthenticator from cfg. teamsStore
 // resolves a user's displayed "소속" (affiliation) from their LDAP group
-// membership — see resolveDepartment.
-func NewLDAPAuthenticator(cfg Config, teamsStore teams.Store) *LDAPAuthenticator {
-	return &LDAPAuthenticator{cfg: cfg, teams: teamsStore}
+// membership — see resolveDepartment. groupFilterTmpl is the parsed
+// group-search-filter template (see ParseGroupFilterTemplate) — callers
+// should parse cfg.GroupSearchFilter once at startup and pass the result
+// here so a malformed filter fails fast rather than on first login; a nil
+// groupFilterTmpl falls back to DefaultGroupSearchFilter.
+func NewLDAPAuthenticator(cfg Config, teamsStore teams.Store, groupFilterTmpl *template.Template) *LDAPAuthenticator {
+	if groupFilterTmpl == nil {
+		groupFilterTmpl = template.Must(ParseGroupFilterTemplate(DefaultGroupSearchFilter))
+	}
+	return &LDAPAuthenticator{cfg: cfg, teams: teamsStore, groupFilterTmpl: groupFilterTmpl}
 }
 
 func (a *LDAPAuthenticator) dial() (*goldap.Conn, error) {
@@ -80,7 +90,7 @@ func (a *LDAPAuthenticator) Authenticate(username, password string) (*model.User
 		return nil, err
 	}
 
-	groups, err := a.lookupGroupCNs(search, userDN)
+	groups, err := a.lookupGroupCNs(search, userDN, username)
 	if err != nil {
 		return nil, err
 	}
@@ -106,7 +116,12 @@ func (a *LDAPAuthenticator) Authenticate(username, password string) (*model.User
 		return nil, ErrNoRole
 	}
 
-	return &model.User{Username: username, Role: role, Department: a.resolveDepartment(groups, department)}, nil
+	return &model.User{
+		Username:   username,
+		Role:       role,
+		Department: a.resolveDepartment(groups, department),
+		Teams:      ResolveTeams(groups),
+	}, nil
 }
 
 // resolveDepartment prefers the admin-managed group-to-team-name mapping
@@ -156,11 +171,15 @@ func (a *LDAPAuthenticator) lookupUser(conn *goldap.Conn, username string) (dn, 
 	return entry.DN, entry.GetAttributeValue("o"), nil
 }
 
-func (a *LDAPAuthenticator) lookupGroupCNs(conn *goldap.Conn, userDN string) ([]string, error) {
+func (a *LDAPAuthenticator) lookupGroupCNs(conn *goldap.Conn, userDN, username string) ([]string, error) {
+	filter, err := a.buildGroupFilter(userDN, username)
+	if err != nil {
+		return nil, err
+	}
 	req := goldap.NewSearchRequest(
 		a.cfg.GroupBaseDN(),
 		goldap.ScopeWholeSubtree, goldap.NeverDerefAliases, 0, 0, false,
-		fmt.Sprintf("(&(objectClass=groupOfNames)(member=%s))", goldap.EscapeFilter(userDN)),
+		filter,
 		[]string{"cn"},
 		nil,
 	)
@@ -175,4 +194,19 @@ func (a *LDAPAuthenticator) lookupGroupCNs(conn *goldap.Conn, userDN string) ([]
 		}
 	}
 	return cns, nil
+}
+
+// buildGroupFilter renders a.groupFilterTmpl with the escaped user DN/uid.
+// Escaping happens here, once, so a filter template author never needs to
+// (and can't forget to) escape user-supplied values themselves.
+func (a *LDAPAuthenticator) buildGroupFilter(userDN, username string) (string, error) {
+	params := GroupFilterParams{
+		UserDN: goldap.EscapeFilter(userDN),
+		UID:    goldap.EscapeFilter(username),
+	}
+	var buf bytes.Buffer
+	if err := a.groupFilterTmpl.Execute(&buf, params); err != nil {
+		return "", fmt.Errorf("render group search filter: %w", err)
+	}
+	return buf.String(), nil
 }

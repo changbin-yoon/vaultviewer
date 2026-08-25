@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -51,7 +52,7 @@ func TestClientLoginsOnceAndReusesToken(t *testing.T) {
 	c := newClient(srv.URL, "svc", "pw")
 	ctx := context.Background()
 	for i := 0; i < 3; i++ {
-		if _, err := c.do(ctx, http.MethodGet, "/api/tree", nil); err != nil {
+		if _, err := c.do(ctx, http.MethodGet, "/api/tree", nil, nil); err != nil {
 			t.Fatalf("do: %v", err)
 		}
 	}
@@ -88,7 +89,7 @@ func TestClientReLoginsOnceAfter401(t *testing.T) {
 	// an already-cached session that has since expired server-side.
 	c.setToken("tok-stale")
 
-	data, err := c.do(context.Background(), http.MethodGet, "/api/search", nil)
+	data, err := c.do(context.Background(), http.MethodGet, "/api/search", nil, nil)
 	if err != nil {
 		t.Fatalf("do: %v", err)
 	}
@@ -112,7 +113,7 @@ func TestClientSurfacesLoginFailure(t *testing.T) {
 	defer srv.Close()
 
 	c := newClient(srv.URL, "svc", "wrong-password")
-	if _, err := c.do(context.Background(), http.MethodGet, "/api/tree", nil); err == nil {
+	if _, err := c.do(context.Background(), http.MethodGet, "/api/tree", nil, nil); err == nil {
 		t.Fatal("expected an error when login itself fails, got nil")
 	}
 }
@@ -229,7 +230,106 @@ func TestDoSurfacesNonSuccessStatus(t *testing.T) {
 	defer srv.Close()
 
 	c := newClient(srv.URL, "svc", "pw")
-	if _, err := c.do(context.Background(), http.MethodGet, "/api/file", nil); err == nil {
+	if _, err := c.do(context.Background(), http.MethodGet, "/api/file", nil, nil); err == nil {
 		t.Fatal("expected an error for a non-2xx response, got nil")
+	}
+}
+
+func TestSaveNoteSendsRawBodyAndQueryParams(t *testing.T) {
+	var loginCount atomic.Int32
+	var gotMethod, gotPath, gotReason string
+	var gotBody []byte
+	srv := newTestServer(t, "tok", &loginCount, map[string]http.HandlerFunc{
+		"/api/file": func(w http.ResponseWriter, r *http.Request) {
+			gotMethod = r.Method
+			gotPath = r.URL.Query().Get("path")
+			gotReason = r.URL.Query().Get("reason")
+			gotBody, _ = io.ReadAll(r.Body)
+			w.WriteHeader(http.StatusNoContent)
+		},
+	})
+	defer srv.Close()
+
+	c := newClient(srv.URL, "svc", "pw")
+	result, _, err := c.saveNote(context.Background(), &mcp.CallToolRequest{}, saveNoteArgs{
+		Path: "04-데이터플랫폼-컴포넌트/Trino.md", Content: "# Trino\n본문", Reason: "mcp test",
+	})
+	if err != nil {
+		t.Fatalf("saveNote: %v", err)
+	}
+	if gotMethod != http.MethodPut {
+		t.Errorf("expected PUT, got %s", gotMethod)
+	}
+	if gotPath != "04-데이터플랫폼-컴포넌트/Trino.md" {
+		t.Errorf("path query param did not round-trip, got %q", gotPath)
+	}
+	if gotReason != "mcp test" {
+		t.Errorf("reason query param did not round-trip, got %q", gotReason)
+	}
+	if string(gotBody) != "# Trino\n본문" {
+		t.Errorf("expected raw note body (no JSON envelope), got %q", gotBody)
+	}
+	if text := result.Content[0].(*mcp.TextContent).Text; !strings.Contains(text, "04-데이터플랫폼-컴포넌트/Trino.md") {
+		t.Errorf("expected confirmation to mention the saved path, got %q", text)
+	}
+}
+
+func TestSaveNoteSurfacesForbiddenAsToolError(t *testing.T) {
+	var loginCount atomic.Int32
+	srv := newTestServer(t, "tok", &loginCount, map[string]http.HandlerFunc{
+		"/api/file": func(w http.ResponseWriter, r *http.Request) {
+			http.Error(w, "role does not permit write access", http.StatusForbidden)
+		},
+	})
+	defer srv.Close()
+
+	c := newClient(srv.URL, "svc", "pw")
+	if _, _, err := c.saveNote(context.Background(), &mcp.CallToolRequest{}, saveNoteArgs{Path: "a.md", Content: "x"}); err == nil {
+		t.Fatal("expected the REST 403 to surface as a tool error, got nil")
+	}
+}
+
+func TestDeleteNoteSendsDelete(t *testing.T) {
+	var loginCount atomic.Int32
+	var gotMethod, gotPath string
+	srv := newTestServer(t, "tok", &loginCount, map[string]http.HandlerFunc{
+		"/api/file": func(w http.ResponseWriter, r *http.Request) {
+			gotMethod = r.Method
+			gotPath = r.URL.Query().Get("path")
+			w.WriteHeader(http.StatusNoContent)
+		},
+	})
+	defer srv.Close()
+
+	c := newClient(srv.URL, "svc", "pw")
+	if _, _, err := c.deleteNote(context.Background(), &mcp.CallToolRequest{}, deleteNoteArgs{Path: "old.md"}); err != nil {
+		t.Fatalf("deleteNote: %v", err)
+	}
+	if gotMethod != http.MethodDelete {
+		t.Errorf("expected DELETE, got %s", gotMethod)
+	}
+	if gotPath != "old.md" {
+		t.Errorf("path query param did not round-trip, got %q", gotPath)
+	}
+}
+
+func TestRenameNoteSendsFromAndTo(t *testing.T) {
+	var loginCount atomic.Int32
+	var gotFrom, gotTo string
+	srv := newTestServer(t, "tok", &loginCount, map[string]http.HandlerFunc{
+		"/api/rename": func(w http.ResponseWriter, r *http.Request) {
+			gotFrom = r.URL.Query().Get("from")
+			gotTo = r.URL.Query().Get("to")
+			w.WriteHeader(http.StatusNoContent)
+		},
+	})
+	defer srv.Close()
+
+	c := newClient(srv.URL, "svc", "pw")
+	if _, _, err := c.renameNote(context.Background(), &mcp.CallToolRequest{}, renameNoteArgs{From: "a.md", To: "b.md"}); err != nil {
+		t.Fatalf("renameNote: %v", err)
+	}
+	if gotFrom != "a.md" || gotTo != "b.md" {
+		t.Errorf("from/to query params did not round-trip, got from=%q to=%q", gotFrom, gotTo)
 	}
 }

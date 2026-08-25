@@ -1,27 +1,68 @@
 @import "tailwindcss";
 
-/* AccessLens design tokens — teal accent, Manrope/IBM Plex, rounded shapes.
-   Scoped equivalents for the 대시보드/구성도 pages live in
-   accesslens-dashboard.css; both respond to the same light/dark toggle
-   (see lib/theme.ts) via the [data-theme] attribute on <html>. */
+/* AccessLens design tokens — "vault console": a flat, precise instrument-
+   panel palette (graphite/paper neutrals, a single indigo signal accent)
+   plus three clearance-tier colors that carry real information — view/dev/
+   adm form a genuine trust ordering (read-only → read-write → destructive),
+   so their color and the "clearance bar" component (see RoleTag.tsx) both
+   encode that order rather than decorate it. Scoped equivalents for the
+   대시보드/구성도 pages live in accesslens-dashboard.css and reference these
+   same custom properties (no second hardcoded palette); both respond to the
+   same light/dark toggle (see lib/theme.ts) via [data-theme] on <html>. */
 @theme {
-  --color-bg: #eef1f2;
-  --color-surface: #e2e8ea;
-  --color-text: #12181b;
-  --color-accent: #0f7c86;
-  --color-accent-2: #1c9aa5;
-  --color-divider: color-mix(in srgb, #12181b 16%, transparent);
+  --color-bg: #f1f0ea;
+  --color-surface: #e7e5dc;
+  --color-text: #14181d;
+  --color-accent: #3552cc;
+  --color-accent-2: #5470e0;
+  --color-divider: color-mix(in srgb, #14181d 14%, transparent);
 
-  --color-accent-100: #d8ecee;
-  --color-accent-800: #0b5f68;
+  --color-accent-100: #e3e8fb;
+  --color-accent-800: #28399e;
 
-  --color-danger: #c23b3b;
-  --color-good: #1f8a52;
+  --color-danger: #c0453a;
+  --color-good: #2f8a5b;
   --color-card: #ffffff;
+
+  /* clearance tiers — view < dev < adm is a real trust ordering, not an
+     arbitrary category palette; adm intentionally shares its hue family
+     with --color-danger (highest tier = highest blast radius). */
+  --color-role-view: #5b7fa6;
+  --color-role-view-soft: #e4ebf3;
+  --color-role-dev: #b8842e;
+  --color-role-dev-soft: #f3e9d6;
+  --color-role-adm: #c0453a;
+  --color-role-adm-soft: #f5e0dd;
 
   --font-heading: "Manrope", "Noto Sans KR", system-ui, sans-serif;
   --font-body: "IBM Plex Sans", "Noto Sans KR", system-ui, sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* radius: kept small/precise on purpose — an instrument panel, not a
+     soft consumer app — rather than the 14px "bubble" cards this replaces. */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 32px;
+  --space-8: 48px;
+
+  --motion-micro: 120ms;
+  --motion-base: 200ms;
+  /* reserved for point-in-time confirmations (login/save success) — not
+     the ambient connection-diagram flow, which keeps its own 2.2s loop. */
+  --motion-signal: 1000ms;
+
+  /* elevation-1 (default panel) is flat + hairline border, no shadow — see
+     .card below. elevation-2 is reserved for genuinely floating layers
+     (menus/modals) so a shadow stays a meaningful "this floats" signal. */
+  --elevation-2: 0 4px 16px rgba(20, 24, 29, 0.16);
 }
 
 /* Dark palette — an explicit [data-theme="light"]/[data-theme="dark"] on
@@ -29,41 +70,53 @@
    choice yet, prefers-color-scheme decides. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --color-bg: #0e1416;
-    --color-surface: #1d282b;
-    --color-text: #eef3f4;
-    --color-accent: #4dd0d9;
-    --color-accent-2: #7fe0e6;
-    --color-divider: color-mix(in srgb, #eef3f4 16%, transparent);
+    --color-bg: #10131a;
+    --color-surface: #1b2029;
+    --color-text: #e7e5df;
+    --color-accent: #7c93ff;
+    --color-accent-2: #9bb0ff;
+    --color-divider: color-mix(in srgb, #e7e5df 14%, transparent);
 
-    --color-accent-100: #163539;
-    --color-accent-800: #7fe0e6;
+    --color-accent-100: #202a4d;
+    --color-accent-800: #aebeff;
 
-    --color-danger: #e0696a;
-    --color-good: #4fc785;
-    --color-card: #161f22;
-  }
-  :root:not([data-theme="light"]) .card {
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 12px 32px rgba(0, 0, 0, 0.35);
+    --color-danger: #e17a6e;
+    --color-good: #5fcb8c;
+    --color-card: #161b23;
+
+    --color-role-view: #8fb3de;
+    --color-role-view-soft: #1c2c40;
+    --color-role-dev: #e0aa5c;
+    --color-role-dev-soft: #3a2e18;
+    --color-role-adm: #e17a6e;
+    --color-role-adm-soft: #3d2420;
+
+    --elevation-2: 0 4px 20px rgba(0, 0, 0, 0.45);
   }
 }
 :root[data-theme="dark"] {
-  --color-bg: #0e1416;
-  --color-surface: #1d282b;
-  --color-text: #eef3f4;
-  --color-accent: #4dd0d9;
-  --color-accent-2: #7fe0e6;
-  --color-divider: color-mix(in srgb, #eef3f4 16%, transparent);
+  --color-bg: #10131a;
+  --color-surface: #1b2029;
+  --color-text: #e7e5df;
+  --color-accent: #7c93ff;
+  --color-accent-2: #9bb0ff;
+  --color-divider: color-mix(in srgb, #e7e5df 14%, transparent);
 
-  --color-accent-100: #163539;
-  --color-accent-800: #7fe0e6;
+  --color-accent-100: #202a4d;
+  --color-accent-800: #aebeff;
 
-  --color-danger: #e0696a;
-  --color-good: #4fc785;
-  --color-card: #161f22;
-}
-:root[data-theme="dark"] .card {
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 12px 32px rgba(0, 0, 0, 0.35);
+  --color-danger: #e17a6e;
+  --color-good: #5fcb8c;
+  --color-card: #161b23;
+
+  --color-role-view: #8fb3de;
+  --color-role-view-soft: #1c2c40;
+  --color-role-dev: #e0aa5c;
+  --color-role-dev-soft: #3a2e18;
+  --color-role-adm: #e17a6e;
+  --color-role-adm-soft: #3d2420;
+
+  --elevation-2: 0 4px 20px rgba(0, 0, 0, 0.45);
 }
 
 body {
@@ -88,7 +141,8 @@ h1, h2, h3, h4, h5, h6 {
   font-family: var(--font-heading); font-weight: 600; font-size: 14px; line-height: 1.2;
   color: var(--color-text);
   background: transparent; border: 1px solid var(--color-divider);
-  padding: 8px 14px; border-radius: 8px;
+  padding: 8px 14px; border-radius: var(--radius-lg);
+  transition: background var(--motion-micro) ease, border-color var(--motion-micro) ease;
 }
 .btn:disabled { opacity: 0.45; cursor: not-allowed; }
 .btn-primary { background: var(--color-accent); color: var(--color-bg); border-color: var(--color-accent); }
@@ -103,13 +157,14 @@ h1, h2, h3, h4, h5, h6 {
 .input {
   width: 100%; min-height: 36px; padding: 6px 10px; font: inherit; font-size: 14px;
   color: var(--color-text); caret-color: var(--color-accent);
-  background: var(--color-surface); border: 1px solid var(--color-divider); border-radius: 8px;
+  background: var(--color-surface); border: 1px solid var(--color-divider); border-radius: var(--radius-lg);
+  transition: border-color var(--motion-micro) ease;
 }
 .input:hover { border-color: color-mix(in srgb, var(--color-text) 45%, transparent); }
 .input:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 0; border-color: var(--color-accent); }
 .input:disabled { opacity: 0.5; cursor: not-allowed; }
 
-.seg { display: inline-flex; overflow: hidden; border: 1px solid var(--color-divider); border-radius: 8px; }
+.seg { display: inline-flex; overflow: hidden; border: 1px solid var(--color-divider); border-radius: var(--radius-lg); }
 .seg-opt { display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; font-size: 13px; cursor: pointer; }
 .seg-opt + .seg-opt { border-left: 1px solid var(--color-divider); }
 .seg-opt:has(input:checked) { background: var(--color-accent); color: var(--color-bg); }
@@ -122,6 +177,26 @@ h1, h2, h3, h4, h5, h6 {
 .tag-neutral { background: color-mix(in srgb, var(--color-text) 6%, var(--color-bg)); color: color-mix(in srgb, var(--color-text) 78%, transparent); }
 .tag-outline { border: 1px solid var(--color-accent); color: var(--color-accent); }
 
+/* — clearance bar: the role indicator (see RoleTag.tsx), used wherever a
+   role appears (top bar, dashboard, audit log, settings). Three ticks
+   encode the real view < dev < adm trust ordering (read-only -> read-write
+   -> destructive) instead of a flat color-only pill, so the tier reads even
+   without color. --tier is set inline per role (1/2/3); the nth-child
+   selectors below light up that many ticks. */
+.al-clearance {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-family: var(--font-mono); font-size: 11px; font-weight: 600; letter-spacing: 0.02em;
+  padding: 3px 8px 3px 6px; border-radius: var(--radius-sm);
+}
+.al-clearance-ticks { display: inline-flex; gap: 2px; }
+.al-clearance-ticks span { display: block; width: 3px; height: 9px; border-radius: 1px; background: currentColor; opacity: 0.25; }
+.al-clearance[data-role="view"] { background: var(--color-role-view-soft); color: var(--color-role-view); }
+.al-clearance[data-role="dev"] { background: var(--color-role-dev-soft); color: var(--color-role-dev); }
+.al-clearance[data-role="adm"] { background: var(--color-role-adm-soft); color: var(--color-role-adm); }
+.al-clearance[data-tier="1"] .al-clearance-ticks span:nth-child(1) { opacity: 1; }
+.al-clearance[data-tier="2"] .al-clearance-ticks span:nth-child(-n+2) { opacity: 1; }
+.al-clearance[data-tier="3"] .al-clearance-ticks span { opacity: 1; }
+
 /* — table — */
 .table { width: 100%; border-collapse: collapse; font-size: 14px; }
 .table th {
@@ -132,20 +207,20 @@ h1, h2, h3, h4, h5, h6 {
 .table td { padding: 8px; border-bottom: 1px solid color-mix(in srgb, var(--color-text) 8%, transparent); vertical-align: middle; }
 .table tbody tr:hover { background: color-mix(in srgb, var(--color-text) 4%, transparent); }
 
-/* — panel: rounded bordered card, used for callouts/empty states/forms — */
+/* — panel: bordered card, used for callouts/empty states/forms — */
 .blueprint {
-  position: relative; border: 1px solid var(--color-divider); border-radius: 14px;
+  position: relative; border: 1px solid var(--color-divider); border-radius: var(--radius-lg);
   background: color-mix(in srgb, var(--color-surface) 50%, transparent);
 }
 
-/* — card: elevated white surface for primary work areas (tree, document
-   panel) — floats above the page background rather than sitting flush
-   against it. */
+/* — card: flush flat surface for primary work areas (tree, document panel)
+   — a hairline border reads as "raised" here, not a shadow (elevation-1;
+   see the token block above). Shadows are reserved for genuinely floating
+   layers via --elevation-2, so a shadow stays a meaningful signal. */
 .card {
   background: var(--color-card);
   border: 1px solid var(--color-divider);
-  border-radius: 14px;
-  box-shadow: 0 1px 2px rgba(18, 24, 27, 0.05), 0 8px 24px rgba(18, 24, 27, 0.06);
+  border-radius: var(--radius-lg);
 }
 
 /* — tree — */

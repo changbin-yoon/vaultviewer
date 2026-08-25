@@ -1,0 +1,21 @@
+{{- if .Values.podDisruptionBudget.enabled -}}
+{{- $minReplicas := .Values.replicaCount -}}
+{{- if .Values.autoscaling.enabled -}}
+{{- $minReplicas = .Values.autoscaling.minReplicas -}}
+{{- end -}}
+{{- if lt ($minReplicas | int) 2 -}}
+{{- fail "podDisruptionBudget.enabled requires replicaCount >= 2 (or autoscaling.minReplicas >= 2) — with only 1 replica, minAvailable: 1 would block every voluntary eviction of that pod, including node drains." -}}
+{{- end -}}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "vaultviewer.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "vaultviewer.labels" . | nindent 4 }}
+spec:
+  minAvailable: {{ .Values.podDisruptionBudget.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "vaultviewer.selectorLabels" . | nindent 6 }}
+{{- end -}}

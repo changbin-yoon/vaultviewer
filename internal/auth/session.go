@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strconv"
@@ -37,10 +38,14 @@ func NewSessionManager(secret []byte, ttl time.Duration) *SessionManager {
 }
 
 // Issue creates a signed token encoding user's identity, role, department,
-// and expiration.
+// team grants, and expiration.
 func (sm *SessionManager) Issue(user model.User) (string, error) {
 	expires := time.Now().Add(sm.ttl).Unix()
-	payload := fmt.Sprintf("%s|%s|%s|%d", user.Username, user.Role, user.Department, expires)
+	teamsJSON, err := json.Marshal(user.Teams)
+	if err != nil {
+		return "", fmt.Errorf("encode team grants: %w", err)
+	}
+	payload := fmt.Sprintf("%s|%s|%s|%d|%s", user.Username, user.Role, user.Department, expires, teamsJSON)
 	encodedPayload := base64.RawURLEncoding.EncodeToString([]byte(payload))
 	sig := sm.sign(encodedPayload)
 	return encodedPayload + "." + sig, nil
@@ -64,8 +69,8 @@ func (sm *SessionManager) Verify(token string) (*model.User, error) {
 	if err != nil {
 		return nil, ErrInvalidSession
 	}
-	fields := strings.SplitN(string(rawPayload), "|", 4)
-	if len(fields) != 4 {
+	fields := strings.SplitN(string(rawPayload), "|", 5)
+	if len(fields) != 5 {
 		return nil, ErrInvalidSession
 	}
 	username, role, department := fields[0], model.Role(fields[1]), fields[2]
@@ -76,8 +81,12 @@ func (sm *SessionManager) Verify(token string) (*model.User, error) {
 	if time.Now().Unix() > expires {
 		return nil, ErrSessionExpired
 	}
+	var teams []model.TeamGrant
+	if err := json.Unmarshal([]byte(fields[4]), &teams); err != nil {
+		return nil, ErrInvalidSession
+	}
 
-	return &model.User{Username: username, Role: role, Department: department}, nil
+	return &model.User{Username: username, Role: role, Department: department, Teams: teams}, nil
 }
 
 func (sm *SessionManager) sign(encodedPayload string) string {

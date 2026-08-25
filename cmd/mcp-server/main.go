@@ -1,14 +1,24 @@
 // Command mcp-server wraps AccessLens's REST API as an MCP (Model Context
 // Protocol) server, so AI agents (Claude Code, Claude Desktop, or any other
-// MCP client) can query the vault's tree/search/notes/history/ontology
-// graph as tools instead of calling the REST API directly.
+// MCP client) can query and edit the vault's tree/search/notes/history/
+// ontology graph as tools instead of calling the REST API directly.
 //
 // This binary does not reimplement storage or auth — it authenticates once
-// against an already-running AccessLens server as a single service
-// account (env-configured, never hardcoded) and proxies each tool call to
-// the matching REST endpoint. All tools are read-only; the service
-// account's role (view is enough) is the effective permission ceiling for
-// every agent connected through this server.
+// against an already-running AccessLens server as a single service account
+// (env-configured, never hardcoded) and proxies each tool call to the
+// matching REST endpoint. The service account's LDAP-resolved role is the
+// effective permission ceiling for every agent connected through this
+// server: the write tools (save_note/delete_note/rename_note) call the same
+// RBAC-gated endpoints the web UI does and surface a REST 403 as a tool
+// error verbatim — this binary performs no authorization of its own.
+//
+// One MCP server process authenticates as exactly one AccessLens account.
+// Running one process per human/agent identity (rather than a single
+// account shared across every caller) is what makes the audit trail
+// (GET /api/audit) able to tell which agent made a given change — see the
+// startup log line below, which prints the authenticated username so a
+// misconfigured shared account is obvious immediately rather than
+// discovered later in an audit review.
 package main
 
 import (
@@ -40,7 +50,19 @@ func main() {
 		log.Fatal("ACCESSLENS_USERNAME and ACCESSLENS_PASSWORD are required")
 	}
 
+	ctx := context.Background()
+
 	c := newClient(baseURL, username, password)
+	// Log in eagerly (rather than lazily on the first tool call) so the
+	// authenticated identity is visible in the startup log immediately —
+	// see the package doc comment above on why that matters for the audit
+	// trail. Fail fast on bad credentials rather than surfacing a
+	// confusing error from an agent's first tool call instead.
+	if _, err := c.login(ctx); err != nil {
+		log.Fatalf("authenticate to accesslens as %q: %v", username, err)
+	}
+	log.Printf("authenticated to accesslens (%s) as %q", baseURL, username)
+
 	server := mcp.NewServer(&mcp.Implementation{Name: "accesslens", Version: "0.1.0"}, nil)
 
 	mcp.AddTool(server, &mcp.Tool{
@@ -69,7 +91,25 @@ func main() {
 		Description: "특정 노트의 변경 이력(생성/수정/삭제/이름변경, 사용자, 타임스탬프)을 반환합니다.",
 	}, c.getNoteHistory)
 
-	ctx := context.Background()
+	mcp.AddTool(server, &mcp.Tool{
+		Name: "save_note",
+		Description: "노트를 경로에 저장합니다 — 해당 경로에 노트가 없으면 새로 만들고, 있으면 " +
+			"내용을 덮어씁니다(REST /api/file이 create/update를 구분하지 않는 것과 동일). " +
+			"dev 이상 역할의 계정으로 연결된 서버에서만 성공하며, view 역할이면 403으로 실패합니다.",
+	}, c.saveNote)
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name: "delete_note",
+		Description: "경로의 노트를 삭제합니다. adm 역할의 계정으로 연결된 서버에서만 성공하며, " +
+			"dev/view 역할이면 403으로 실패합니다.",
+	}, c.deleteNote)
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name: "rename_note",
+		Description: "노트 경로를 바꿉니다 — 같은 디렉토리 내에서만 가능합니다(다른 폴더로 옮기는 " +
+			"것은 지원하지 않음). dev 이상 역할의 계정으로 연결된 서버에서만 성공합니다.",
+	}, c.renameNote)
+
 	switch *transport {
 	case "stdio":
 		if err := server.Run(ctx, &mcp.StdioTransport{}); err != nil {
@@ -162,18 +202,25 @@ func (c *client) tokenOrLogin(ctx context.Context) (string, error) {
 	return c.login(ctx)
 }
 
-// do issues an authenticated GET (or DELETE, but no tools in this binary
-// need one) against AccessLens's REST API. On a 401 — most likely the
-// cached session token expired — it discards the cached token, logs in
-// once more, and retries exactly once.
-func (c *client) do(ctx context.Context, method, path string, query url.Values) ([]byte, error) {
+// do issues an authenticated request against AccessLens's REST API. body is
+// nil for the read tools' GET calls; the write tools pass the raw note
+// content, matching what /api/file's PUT handler expects (no JSON
+// envelope). On a 401 — most likely the cached session token expired — it
+// discards the cached token, logs in once more, and retries exactly once.
+// body is buffered as a []byte (not a single-use io.Reader) precisely so
+// that retry can replay it.
+func (c *client) do(ctx context.Context, method, path string, query url.Values, body []byte) ([]byte, error) {
 	target := c.baseURL + path
 	if len(query) > 0 {
 		target += "?" + query.Encode()
 	}
 
 	attempt := func(token string) (*http.Response, []byte, error) {
-		req, err := http.NewRequestWithContext(ctx, method, target, nil)
+		var reqBody io.Reader
+		if body != nil {
+			reqBody = bytes.NewReader(body)
+		}
+		req, err := http.NewRequestWithContext(ctx, method, target, reqBody)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -224,7 +271,7 @@ func rawTextResult(data []byte) (*mcp.CallToolResult, any, error) {
 type emptyArgs struct{}
 
 func (c *client) getOntologyGraph(ctx context.Context, req *mcp.CallToolRequest, _ emptyArgs) (*mcp.CallToolResult, any, error) {
-	data, err := c.do(ctx, http.MethodGet, "/api/graph", nil)
+	data, err := c.do(ctx, http.MethodGet, "/api/graph", nil, nil)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -236,7 +283,7 @@ type searchArgs struct {
 }
 
 func (c *client) searchVault(ctx context.Context, req *mcp.CallToolRequest, args searchArgs) (*mcp.CallToolResult, any, error) {
-	data, err := c.do(ctx, http.MethodGet, "/api/search", url.Values{"q": {args.Query}})
+	data, err := c.do(ctx, http.MethodGet, "/api/search", url.Values{"q": {args.Query}}, nil)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -257,7 +304,7 @@ type vaultFile struct {
 }
 
 func (c *client) readNote(ctx context.Context, req *mcp.CallToolRequest, args readNoteArgs) (*mcp.CallToolResult, any, error) {
-	data, err := c.do(ctx, http.MethodGet, "/api/file", url.Values{"path": {args.Path}})
+	data, err := c.do(ctx, http.MethodGet, "/api/file", url.Values{"path": {args.Path}}, nil)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -273,7 +320,7 @@ type listTreeArgs struct {
 }
 
 func (c *client) listTree(ctx context.Context, req *mcp.CallToolRequest, args listTreeArgs) (*mcp.CallToolResult, any, error) {
-	data, err := c.do(ctx, http.MethodGet, "/api/tree", url.Values{"path": {args.Path}})
+	data, err := c.do(ctx, http.MethodGet, "/api/tree", url.Values{"path": {args.Path}}, nil)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -285,11 +332,60 @@ type historyArgs struct {
 }
 
 func (c *client) getNoteHistory(ctx context.Context, req *mcp.CallToolRequest, args historyArgs) (*mcp.CallToolResult, any, error) {
-	data, err := c.do(ctx, http.MethodGet, "/api/history", url.Values{"path": {args.Path}})
+	data, err := c.do(ctx, http.MethodGet, "/api/history", url.Values{"path": {args.Path}}, nil)
 	if err != nil {
 		return nil, nil, err
 	}
 	return rawTextResult(data)
+}
+
+type saveNoteArgs struct {
+	Path    string `json:"path" jsonschema:"볼트 기준 상대 경로"`
+	Content string `json:"content" jsonschema:"노트 본문(마크다운 원문). 그대로 저장되며 기존 내용을 완전히 대체합니다"`
+	Reason  string `json:"reason,omitempty" jsonschema:"변경 사유 — 감사 로그(/api/audit)에 기록됩니다"`
+}
+
+// saveNote wraps PUT /api/file, which both creates and overwrites — REST
+// draws no distinction between the two, so neither does this tool (see the
+// package doc comment / this tool's description for why there's no
+// separate create_note).
+func (c *client) saveNote(ctx context.Context, req *mcp.CallToolRequest, args saveNoteArgs) (*mcp.CallToolResult, any, error) {
+	q := url.Values{"path": {args.Path}}
+	if args.Reason != "" {
+		q.Set("reason", args.Reason)
+	}
+	if _, err := c.do(ctx, http.MethodPut, "/api/file", q, []byte(args.Content)); err != nil {
+		return nil, nil, err
+	}
+	return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: fmt.Sprintf("saved %s", args.Path)}}}, nil, nil
+}
+
+type deleteNoteArgs struct {
+	Path string `json:"path" jsonschema:"볼트 기준 상대 경로"`
+}
+
+func (c *client) deleteNote(ctx context.Context, req *mcp.CallToolRequest, args deleteNoteArgs) (*mcp.CallToolResult, any, error) {
+	if _, err := c.do(ctx, http.MethodDelete, "/api/file", url.Values{"path": {args.Path}}, nil); err != nil {
+		return nil, nil, err
+	}
+	return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: fmt.Sprintf("deleted %s", args.Path)}}}, nil, nil
+}
+
+type renameNoteArgs struct {
+	From   string `json:"from" jsonschema:"현재 경로"`
+	To     string `json:"to" jsonschema:"새 경로 — 같은 디렉토리 내에서만 가능합니다"`
+	Reason string `json:"reason,omitempty" jsonschema:"변경 사유 — 감사 로그(/api/audit)에 기록됩니다"`
+}
+
+func (c *client) renameNote(ctx context.Context, req *mcp.CallToolRequest, args renameNoteArgs) (*mcp.CallToolResult, any, error) {
+	q := url.Values{"from": {args.From}, "to": {args.To}}
+	if args.Reason != "" {
+		q.Set("reason", args.Reason)
+	}
+	if _, err := c.do(ctx, http.MethodPut, "/api/rename", q, nil); err != nil {
+		return nil, nil, err
+	}
+	return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: fmt.Sprintf("renamed %s -> %s", args.From, args.To)}}}, nil, nil
 }
 
 func envOr(key, fallback string) string {

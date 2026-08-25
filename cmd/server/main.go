@@ -3,13 +3,10 @@ package main
 import (
 	"context"
 	"crypto/rand"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
-	"net/url"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -18,13 +15,10 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/gorilla/websocket"
-
+	"github.com/accesslens/accesslens/internal/api"
 	"github.com/accesslens/accesslens/internal/audit"
 	"github.com/accesslens/accesslens/internal/auth"
 	"github.com/accesslens/accesslens/internal/backup"
-	"github.com/accesslens/accesslens/internal/model"
-	"github.com/accesslens/accesslens/internal/ontology"
 	"github.com/accesslens/accesslens/internal/opa"
 	"github.com/accesslens/accesslens/internal/s3iam"
 	"github.com/accesslens/accesslens/internal/storage"
@@ -84,7 +78,11 @@ func main() {
 	if err != nil {
 		log.Fatalf("load LDAP config: %v", err)
 	}
-	authenticator := auth.NewLDAPAuthenticator(ldapCfg, teamsStore)
+	groupFilterTmpl, err := auth.ParseGroupFilterTemplate(ldapCfg.GroupSearchFilter)
+	if err != nil {
+		log.Fatalf("parse LDAP group search filter: %v", err)
+	}
+	authenticator := auth.NewLDAPAuthenticator(ldapCfg, teamsStore, groupFilterTmpl)
 	sm := auth.NewSessionManager(sessionSecret(), sessionTTL())
 	loginThrottle := auth.NewLoginThrottle()
 
@@ -105,311 +103,39 @@ func main() {
 	s3iamCfg := s3iam.LoadConfigFromEnv()
 	s3iamClient := s3iam.NewClient(s3iamCfg)
 
-	mux := http.NewServeMux()
-
-	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
-	})
-
-	mux.HandleFunc("/api/login", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-			return
-		}
-		var creds struct {
-			Username string `json:"username"`
-			Password string `json:"password"`
-		}
-		if err := json.NewDecoder(r.Body).Decode(&creds); err != nil {
-			http.Error(w, "invalid request body", http.StatusBadRequest)
-			return
-		}
-
-		throttleKey := strings.ToLower(strings.TrimSpace(creds.Username))
-		if allowed, wait := loginThrottle.Allow(throttleKey); !allowed {
-			w.Header().Set("Retry-After", strconv.Itoa(int(wait.Seconds())+1))
-			http.Error(w, "too many failed login attempts, try again shortly", http.StatusTooManyRequests)
-			return
-		}
-
-		user, err := authenticator.Authenticate(creds.Username, creds.Password)
-		if err != nil {
-			status := http.StatusUnauthorized
-			if !errors.Is(err, auth.ErrInvalidCredentials) && !errors.Is(err, auth.ErrNoRole) {
-				// An LDAP/network failure isn't the caller's fault — don't
-				// spend part of their backoff budget on it.
-				log.Printf("ldap authenticate error: %v", err)
-				status = http.StatusBadGateway
-			} else {
-				loginThrottle.RecordFailure(throttleKey)
-			}
-			http.Error(w, "authentication failed", status)
-			return
-		}
-		loginThrottle.RecordSuccess(throttleKey)
-
-		token, err := sm.Issue(*user)
-		if err != nil {
-			http.Error(w, "failed to issue session", http.StatusInternalServerError)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]string{
-			"token":      token,
-			"username":   user.Username,
-			"role":       string(user.Role),
-			"department": user.Department,
-		})
-	})
-
-	mux.HandleFunc("/api/tree", auth.RequireAuth(sm, func(w http.ResponseWriter, r *http.Request, _ model.User) {
-		items, err := engine.List(r.URL.Query().Get("path"))
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(items)
-	}))
-
-	mux.HandleFunc("/api/search", auth.RequireAuth(sm, func(w http.ResponseWriter, r *http.Request, _ model.User) {
-		results, err := engine.Search(r.URL.Query().Get("q"))
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(results)
-	}))
-
-	// The vault-wide note graph (nodes + typed/untyped edges), for
-	// consumers other than the frontend's own graph view — an AI agent,
-	// a script, an MCP server — that want the ontology without fetching
-	// every note and re-parsing frontmatter/wikilinks themselves. Read
-	// access only, same tier as /api/tree and /api/search.
-	mux.HandleFunc("/api/graph", auth.RequireAuth(sm, func(w http.ResponseWriter, r *http.Request, _ model.User) {
-		graph, err := ontology.Build(engine)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(graph)
-	}))
-
-	mux.HandleFunc("/api/namespace", auth.RequireWrite(sm, func(w http.ResponseWriter, r *http.Request, user model.User) {
-		if r.Method != http.MethodPost {
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-			return
-		}
-		if err := engine.CreateNamespace(r.URL.Query().Get("path"), user.Username); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		w.WriteHeader(http.StatusNoContent)
-	}))
-
-	mux.HandleFunc("/api/rename", auth.RequireWrite(sm, func(w http.ResponseWriter, r *http.Request, user model.User) {
-		if r.Method != http.MethodPut {
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-			return
-		}
-		from, to := r.URL.Query().Get("from"), r.URL.Query().Get("to")
-		if err := engine.Rename(from, to, user.Username, r.URL.Query().Get("reason")); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		w.WriteHeader(http.StatusNoContent)
-	}))
-
-	mux.HandleFunc("/api/file", func(w http.ResponseWriter, r *http.Request) {
-		switch r.Method {
-		case http.MethodGet:
-			auth.RequireAuth(sm, func(w http.ResponseWriter, r *http.Request, _ model.User) {
-				file, err := engine.Read(r.URL.Query().Get("path"))
-				if err != nil {
-					http.Error(w, err.Error(), http.StatusBadRequest)
-					return
-				}
-				w.Header().Set("Content-Type", "application/json")
-				json.NewEncoder(w).Encode(file)
-			})(w, r)
-		case http.MethodPut, http.MethodPost:
-			auth.RequireWrite(sm, func(w http.ResponseWriter, r *http.Request, user model.User) {
-				content, err := io.ReadAll(r.Body)
-				if err != nil {
-					http.Error(w, "failed to read request body", http.StatusBadRequest)
-					return
-				}
-				if err := engine.Save(r.URL.Query().Get("path"), content, user.Username, r.URL.Query().Get("reason")); err != nil {
-					http.Error(w, err.Error(), http.StatusBadRequest)
-					return
-				}
-				w.WriteHeader(http.StatusNoContent)
-			})(w, r)
-		case http.MethodDelete:
-			auth.RequireDelete(sm, func(w http.ResponseWriter, r *http.Request, user model.User) {
-				if err := engine.Delete(r.URL.Query().Get("path"), user.Username); err != nil {
-					http.Error(w, err.Error(), http.StatusBadRequest)
-					return
-				}
-				w.WriteHeader(http.StatusNoContent)
-			})(w, r)
-		default:
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		}
-	})
-
-	mux.HandleFunc("/api/history", auth.RequireAuth(sm, func(w http.ResponseWriter, r *http.Request, _ model.User) {
-		history, err := engine.GetHistory(r.URL.Query().Get("path"))
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(history)
-	}))
-
-	mux.HandleFunc("/api/audit", auth.RequireAdmin(sm, func(w http.ResponseWriter, r *http.Request, _ model.User) {
-		entries, err := recorder.All()
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(entries)
-	}))
-
-	mux.HandleFunc("/ws/audit", auditWebSocketHandler(sm, recorder))
-
-	mux.HandleFunc("/api/me", auth.RequireAuth(sm, func(w http.ResponseWriter, r *http.Request, user model.User) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]string{
-			"username":   user.Username,
-			"role":       string(user.Role),
-			"department": user.Department,
-		})
-	}))
-
-	// Dashboard status card for Trino — a connectivity check plus the
-	// operator-configured role/catalog labels (not a live GRANT lookup, see
-	// internal/trino). Always returns 200; "enabled: false" is how the
-	// frontend tells "not configured" apart from "configured but down".
-	mux.HandleFunc("/api/trino", auth.RequireAuth(sm, func(w http.ResponseWriter, r *http.Request, user model.User) {
-		w.Header().Set("Content-Type", "application/json")
-		if !trinoCfg.Enabled() {
-			json.NewEncoder(w).Encode(map[string]bool{"enabled": false})
-			return
-		}
-		connected, err := trinoClient.CheckConnection(r.Context())
-		if err != nil {
-			connected = false
-		}
-		json.NewEncoder(w).Encode(map[string]any{
-			"enabled":   true,
-			"connected": connected,
-			"role":      trinoCfg.RoleMap[user.Role],
-			"catalogs":  trinoCfg.Catalogs,
-		})
-	}))
-
-	// Dashboard status card for OPA — resolves the caller's mapped LDAP
-	// group against OPA's live grants document (see internal/opa). One
-	// step more live than Trino's card: team/catalogs/operations come from
-	// OPA itself, not AccessLens's own Helm values.
-	mux.HandleFunc("/api/opa", auth.RequireAuth(sm, func(w http.ResponseWriter, r *http.Request, user model.User) {
-		w.Header().Set("Content-Type", "application/json")
-		if !opaCfg.Enabled() {
-			json.NewEncoder(w).Encode(map[string]bool{"enabled": false})
-			return
-		}
-		grants, err := opaClient.Resolve(r.Context(), opaCfg.GroupMap[user.Role])
-		if err != nil {
-			json.NewEncoder(w).Encode(map[string]any{"enabled": true, "connected": false})
-			return
-		}
-		if grants == nil {
-			grants = []opa.Grant{} // serialize as `[]`, not `null`, when no group is mapped
-		}
-		json.NewEncoder(w).Encode(map[string]any{
-			"enabled":   true,
-			"connected": true,
-			"grants":    grants,
-		})
-	}))
-
-	// Dashboard status card for S3 IAM — a connectivity check (does the
-	// fixed LDAP service account still successfully AssumeRoleWithLDAPIdentity
-	// against the S3 endpoint) plus operator-configured role/bucket labels,
-	// same shape as Trino's card (see internal/s3iam).
-	mux.HandleFunc("/api/s3iam", auth.RequireAuth(sm, func(w http.ResponseWriter, r *http.Request, user model.User) {
-		w.Header().Set("Content-Type", "application/json")
-		if !s3iamCfg.Enabled() {
-			json.NewEncoder(w).Encode(map[string]bool{"enabled": false})
-			return
-		}
-		connected, err := s3iamClient.CheckConnection(r.Context())
-		if err != nil {
-			connected = false
-		}
-		json.NewEncoder(w).Encode(map[string]any{
-			"enabled":   true,
-			"connected": connected,
-			"role":      s3iamCfg.RoleMap[user.Role],
-			"buckets":   s3iamCfg.Buckets,
-		})
-	}))
-
-	mux.HandleFunc("/api/config", auth.RequireAuth(sm, func(w http.ResponseWriter, r *http.Request, _ model.User) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(configInfo)
-	}))
-
-	mux.HandleFunc("/api/group-teams", func(w http.ResponseWriter, r *http.Request) {
-		switch r.Method {
-		case http.MethodGet:
-			auth.RequireAdmin(sm, func(w http.ResponseWriter, r *http.Request, _ model.User) {
-				m, err := teamsStore.Get()
-				if err != nil {
-					http.Error(w, err.Error(), http.StatusInternalServerError)
-					return
-				}
-				w.Header().Set("Content-Type", "application/json")
-				json.NewEncoder(w).Encode(m)
-			})(w, r)
-		case http.MethodPut:
-			auth.RequireAdmin(sm, func(w http.ResponseWriter, r *http.Request, _ model.User) {
-				var m map[string]string
-				if err := json.NewDecoder(r.Body).Decode(&m); err != nil {
-					http.Error(w, "invalid request body", http.StatusBadRequest)
-					return
-				}
-				if err := teamsStore.Set(m); err != nil {
-					http.Error(w, err.Error(), http.StatusInternalServerError)
-					return
-				}
-				w.WriteHeader(http.StatusNoContent)
-			})(w, r)
-		default:
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		}
-	})
-
 	staticDir := envOr("ACCESSLENS_STATIC_DIR", "web/dist")
 	if _, err := os.Stat(staticDir); err == nil {
-		mux.Handle("/", http.FileServer(http.Dir(staticDir)))
 		log.Printf("serving frontend from %s", staticDir)
 	} else {
 		log.Printf("no frontend build found at %s; API-only mode", staticDir)
+		staticDir = ""
 	}
+
+	router := api.NewRouter(api.Deps{
+		Engine:        engine,
+		Sessions:      sm,
+		Authenticator: authenticator,
+		LoginThrottle: loginThrottle,
+		Recorder:      recorder,
+		TeamsStore:    teamsStore,
+		Trino:         trinoCfg,
+		TrinoClient:   trinoClient,
+		Opa:           opaCfg,
+		OpaClient:     opaClient,
+		S3Iam:         s3iamCfg,
+		S3IamClient:   s3iamClient,
+		ConfigInfo:    configInfo,
+		StaticDir:     staticDir,
+		CORSOrigin:    envOr("ACCESSLENS_CORS_ORIGIN", "http://localhost:5173"),
+		MaxBodyBytes:  maxBodyBytes(),
+	})
 
 	// Named HTTP_PORT rather than PORT: Kubernetes auto-injects a
 	// "<SERVICE_NAME>_PORT" env var (e.g. ACCESSLENS_PORT) for every
 	// Service visible to the pod, which would otherwise collide with and
 	// silently override this one.
 	addr := ":" + envOr("ACCESSLENS_HTTP_PORT", "8080")
-	srv := &http.Server{Addr: addr, Handler: withCORS(mux)}
+	srv := &http.Server{Addr: addr, Handler: router}
 
 	go func() {
 		log.Printf("accesslens server listening on %s (mode=%s)", addr, mode)
@@ -517,122 +243,6 @@ func buildEngine(mode string, recorder storage.AuditRecorder) (storage.VaultStor
 	}
 }
 
-// withCORS allows a separately served frontend (e.g. the Vite dev server)
-// to call this API from another origin. Origins are restricted to an
-// explicit allowlist rather than reflecting any Origin header. Not needed
-// when the frontend is served from this same process (the default), since
-// same-origin requests bypass CORS entirely.
-func withCORS(next http.Handler) http.Handler {
-	allowedOrigin := envOr("ACCESSLENS_CORS_ORIGIN", "http://localhost:5173")
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("Origin") == allowedOrigin {
-			w.Header().Set("Access-Control-Allow-Origin", allowedOrigin)
-			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-			w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
-		}
-		if r.Method == http.MethodOptions {
-			w.WriteHeader(http.StatusNoContent)
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
-}
-
-const (
-	wsPongWait   = 60 * time.Second
-	wsPingPeriod = (wsPongWait * 9) / 10
-	wsWriteWait  = 10 * time.Second
-)
-
-var wsUpgrader = websocket.Upgrader{CheckOrigin: wsCheckOrigin}
-
-// wsCheckOrigin allows same-origin WebSocket handshakes (the default
-// deployment, frontend served from this same process) and the explicit
-// ACCESSLENS_CORS_ORIGIN allowlist (a separately served dev frontend),
-// mirroring withCORS's REST policy. gorilla/websocket otherwise rejects
-// every cross-origin handshake by default.
-func wsCheckOrigin(r *http.Request) bool {
-	origin := r.Header.Get("Origin")
-	if origin == "" {
-		return true
-	}
-	if u, err := url.Parse(origin); err == nil && u.Host == r.Host {
-		return true
-	}
-	return origin == envOr("ACCESSLENS_CORS_ORIGIN", "http://localhost:5173")
-}
-
-// auditWebSocketHandler streams every new audit log entry to the client as
-// audit.MemoryRecorder.Record is called, so the audit log view updates
-// live instead of polling. Auth uses a ?token= query parameter rather than
-// the Authorization header every other endpoint requires, since browsers
-// cannot set custom headers on a WebSocket handshake request.
-func auditWebSocketHandler(sm *auth.SessionManager, recorder *audit.MemoryRecorder) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		user, err := sm.Verify(r.URL.Query().Get("token"))
-		if err != nil {
-			http.Error(w, "invalid or expired session", http.StatusUnauthorized)
-			return
-		}
-		if !user.Role.IsAdmin() {
-			http.Error(w, "role does not permit admin access", http.StatusForbidden)
-			return
-		}
-
-		conn, err := wsUpgrader.Upgrade(w, r, nil)
-		if err != nil {
-			log.Printf("audit ws: upgrade failed: %v", err)
-			return
-		}
-		defer conn.Close()
-
-		ch, unsubscribe := recorder.Subscribe()
-		defer unsubscribe()
-
-		conn.SetReadDeadline(time.Now().Add(wsPongWait))
-		conn.SetPongHandler(func(string) error {
-			conn.SetReadDeadline(time.Now().Add(wsPongWait))
-			return nil
-		})
-
-		// The client never sends messages; this goroutine's only job is to
-		// notice the connection closing (tab closed, network drop) via a
-		// read error, so the main loop below can stop promptly.
-		closed := make(chan struct{})
-		go func() {
-			defer close(closed)
-			for {
-				if _, _, err := conn.NextReader(); err != nil {
-					return
-				}
-			}
-		}()
-
-		ticker := time.NewTicker(wsPingPeriod)
-		defer ticker.Stop()
-
-		for {
-			select {
-			case <-closed:
-				return
-			case entry, ok := <-ch:
-				if !ok {
-					return
-				}
-				conn.SetWriteDeadline(time.Now().Add(wsWriteWait))
-				if err := conn.WriteJSON(entry); err != nil {
-					return
-				}
-			case <-ticker.C:
-				conn.SetWriteDeadline(time.Now().Add(wsWriteWait))
-				if err := conn.WriteMessage(websocket.PingMessage, nil); err != nil {
-					return
-				}
-			}
-		}
-	}
-}
-
 // sessionSecret loads the HMAC key used to sign session tokens from
 // ACCESSLENS_SESSION_SECRET. If unset, a random key is generated for the
 // life of this process — sessions won't survive a restart, but the secret
@@ -659,6 +269,24 @@ func sessionTTL() time.Duration {
 		hours = parsed
 	}
 	return time.Duration(hours) * time.Hour
+}
+
+// maxBodyBytes caps PUT/POST /api/file request bodies. Default (20MiB) is
+// sized off the largest attachment actually seen in a live vault (~2.5MB
+// images embedded in notes, as of 2026-08-25) with generous headroom, not
+// off the typical note body (a few KB) — a tighter default would reject
+// legitimate attachment uploads.
+func maxBodyBytes() int64 {
+	const defaultBytes = 20 * 1024 * 1024
+	v := os.Getenv("ACCESSLENS_MAX_BODY_BYTES")
+	if v == "" {
+		return defaultBytes
+	}
+	parsed, err := strconv.ParseInt(v, 10, 64)
+	if err != nil || parsed <= 0 {
+		log.Fatalf("invalid ACCESSLENS_MAX_BODY_BYTES %q: must be a positive integer", v)
+	}
+	return parsed
 }
 
 func envOr(key, fallback string) string {

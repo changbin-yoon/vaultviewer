@@ -1,6 +1,7 @@
 import type { CSSProperties } from "react";
-import type { Config, OpaIntegration, Role, S3IamIntegration, TrinoIntegration } from "../lib/api";
+import type { Config, OpaIntegration, Role, S3IamIntegration, TeamGrant, TrinoIntegration } from "../lib/api";
 import { useIntegrations } from "../lib/useIntegrations";
+import { RoleTag } from "./RoleTag";
 
 type View = "dashboard" | "vault" | "graph" | "tags" | "search" | "audit" | "guide" | "settings" | "arch";
 
@@ -318,10 +319,15 @@ export function DashboardPage({
   onNavigateView,
 }: {
   config: Config | null;
-  session: { username: string; role: Role; department: string };
+  session: { username: string; role: Role; department: string; teams: TeamGrant[] };
   onNavigateView: (v: View) => void;
 }) {
   const vaultSub = config ? `${config.mode} 모드` : "";
+  // The avatar shows the primary team's name when the account's LDAP
+  // groups resolve one (e.g. "bi-adm" -> "BI") — falls back to username
+  // initials for accounts with no team-scoped groups (e.g. plain "adm").
+  const primaryTeam = session.teams[0]?.team;
+  const avatarLabel = primaryTeam ? primaryTeam.toUpperCase() : session.username.slice(0, 2);
   const { trino, opa, s3iam } = useIntegrations();
 
   const integratedNames = [
@@ -339,7 +345,7 @@ export function DashboardPage({
       <section className="al-hero">
         <div className="al-panel al-id-card">
           <div className="al-who">
-            <div className="al-avatar-lg">{session.username.slice(0, 2)}</div>
+            <div className="al-avatar-lg">{avatarLabel}</div>
             <div>
               <div className="al-name">{session.username}</div>
               {session.department && <div className="al-dept">{session.department}</div>}
@@ -349,7 +355,7 @@ export function DashboardPage({
             <div className="al-id-row">
               <span className="al-k">역할</span>
               <span className="al-v">
-                <span className="al-role-pill">{session.role}</span>
+                <RoleTag role={session.role} />
               </span>
             </div>
             <div className="al-id-row">
@@ -371,6 +377,20 @@ export function DashboardPage({
               </>
             )}
           </div>
+          {session.teams.length > 0 && (
+            <div className="al-team-grants">
+              <div className="al-team-grants-label">소속 팀 및 권한</div>
+              {session.teams.map((t) => (
+                <div key={t.team} className="al-team-grant-row">
+                  <div className="al-team-top">
+                    <span className="al-team-badge">{t.team}</span>
+                    <RoleTag role={t.role} />
+                  </div>
+                  <span className="al-team-desc">{ROLE_DESC[t.role]}</span>
+                </div>
+              ))}
+            </div>
+          )}
           <p className="al-caption">
             이 계정의 역할이 {integratedNames.join("·")} 권한을 결정합니다.
             {remainingNames.length > 0 && (

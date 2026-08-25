@@ -4,13 +4,58 @@
 package auth
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"strconv"
 	"strings"
+	"text/template"
 
 	"github.com/accesslens/accesslens/internal/model"
 )
+
+// DefaultGroupSearchFilter is the LDAP filter template used to find the
+// groups a user belongs to when ACCESSLENS_LDAP_GROUP_SEARCH_FILTER is
+// unset. It is byte-identical to the filter AccessLens has always used, so
+// existing deployments (e.g. cluster-mesh1) see no behavior change on
+// upgrade.
+const DefaultGroupSearchFilter = "(&(objectClass=groupOfNames)(member={{.UserDN}}))"
+
+// GroupFilterParams are the fields available to a group-search-filter
+// template (see ParseGroupFilterTemplate). Both fields are pre-escaped with
+// goldap.EscapeFilter by the caller before the template executes, so a
+// template author never needs to escape them again.
+type GroupFilterParams struct {
+	// UserDN is the authenticated user's full directory DN.
+	UserDN string
+	// UID is the authenticated user's login username, useful for schemas
+	// that key group membership off a bare uid rather than a full DN (e.g.
+	// posixGroup's memberUid).
+	UID string
+}
+
+// ParseGroupFilterTemplate parses filter as a Go template producing an LDAP
+// search filter — the same configurability Trino's LDAP group-provider
+// exposes via ldap.group-search-filter, letting a deployment match whatever
+// group-membership schema its directory actually uses (groupOfNames member,
+// posixGroup memberUid, groupOfUniqueNames uniqueMember, AD nested-group
+// matching-rule filters, ...) without a code change.
+//
+// The template is validated immediately — parsed AND executed against
+// dummy params — so a malformed filter (bad template syntax, or a typo'd
+// field name like {{.Bogus}}) fails at process startup, not on a user's
+// first login.
+func ParseGroupFilterTemplate(filter string) (*template.Template, error) {
+	tmpl, err := template.New("group-search-filter").Parse(filter)
+	if err != nil {
+		return nil, fmt.Errorf("parse group search filter template: %w", err)
+	}
+	probe := GroupFilterParams{UserDN: "cn=probe,dc=example,dc=com", UID: "probe"}
+	if err := tmpl.Execute(&bytes.Buffer{}, probe); err != nil {
+		return nil, fmt.Errorf("group search filter template failed validation: %w", err)
+	}
+	return tmpl, nil
+}
 
 // Config configures an LDAPAuthenticator. All values are sourced from the
 // environment (or a Kubernetes Secret projected into it) — nothing here is
@@ -42,6 +87,13 @@ type Config struct {
 	// "platform-admins" and "dt-bi-adm" granting RoleAdmin) — see
 	// LoadConfigFromEnv's comma-separated parsing below.
 	GroupRoleMap map[string]model.Role
+
+	// GroupSearchFilter is a Go template producing the LDAP filter used to
+	// find the groups a user belongs to (see ParseGroupFilterTemplate).
+	// Defaults to DefaultGroupSearchFilter. This only changes which group
+	// CNs the search returns — GroupRoleMap still decides how those CNs map
+	// to a role.
+	GroupSearchFilter string
 }
 
 // UserBaseDN returns the DN searched for user entries.
@@ -67,17 +119,22 @@ func (c Config) GroupBaseDN() string {
 //	ACCESSLENS_LDAP_GROUP_ADM     (default "adm", comma-separated for multiple groups)
 //	ACCESSLENS_LDAP_GROUP_DEV     (default "dev", comma-separated for multiple groups)
 //	ACCESSLENS_LDAP_GROUP_VIEW    (default "view", comma-separated for multiple groups)
+//	ACCESSLENS_LDAP_GROUP_SEARCH_FILTER (default DefaultGroupSearchFilter; a Go
+//	                              template producing the LDAP filter used to
+//	                              find a user's groups — fields {{.UserDN}}
+//	                              and {{.UID}} available, see GroupFilterParams)
 func LoadConfigFromEnv() (Config, error) {
 	cfg := Config{
-		Host:         os.Getenv("ACCESSLENS_LDAP_HOST"),
-		Port:         389,
-		UseTLS:       os.Getenv("ACCESSLENS_LDAP_TLS") == "true",
-		BaseDN:       os.Getenv("ACCESSLENS_LDAP_BASE_DN"),
-		UserOU:       envOr("ACCESSLENS_LDAP_USER_OU", "ou=users"),
-		GroupOU:      envOr("ACCESSLENS_LDAP_GROUP_OU", "ou=groups"),
-		BindDN:       os.Getenv("ACCESSLENS_LDAP_BIND_DN"),
-		BindPassword: os.Getenv("ACCESSLENS_LDAP_BIND_PASSWORD"),
-		GroupRoleMap: map[string]model.Role{},
+		Host:              os.Getenv("ACCESSLENS_LDAP_HOST"),
+		Port:              389,
+		UseTLS:            os.Getenv("ACCESSLENS_LDAP_TLS") == "true",
+		BaseDN:            os.Getenv("ACCESSLENS_LDAP_BASE_DN"),
+		UserOU:            envOr("ACCESSLENS_LDAP_USER_OU", "ou=users"),
+		GroupOU:           envOr("ACCESSLENS_LDAP_GROUP_OU", "ou=groups"),
+		BindDN:            os.Getenv("ACCESSLENS_LDAP_BIND_DN"),
+		BindPassword:      os.Getenv("ACCESSLENS_LDAP_BIND_PASSWORD"),
+		GroupRoleMap:      map[string]model.Role{},
+		GroupSearchFilter: envOr("ACCESSLENS_LDAP_GROUP_SEARCH_FILTER", DefaultGroupSearchFilter),
 	}
 	addGroupRoles(cfg.GroupRoleMap, "ACCESSLENS_LDAP_GROUP_ADM", "adm", model.RoleAdmin)
 	addGroupRoles(cfg.GroupRoleMap, "ACCESSLENS_LDAP_GROUP_DEV", "dev", model.RoleDev)

@@ -1,5 +1,14 @@
 export type Role = "adm" | "dev" | "view";
 
+// One LDAP group membership that grants a role scoped to a named team —
+// parsed server-side from a group CN like "bi-adm" (see internal/auth's
+// ResolveTeams). Purely informational: doesn't affect what `role` above
+// actually permits, just lets the UI show "which team(s) grant me what".
+export interface TeamGrant {
+  team: string;
+  role: Role;
+}
+
 export interface FileItem {
   path: string;
   name: string;
@@ -74,15 +83,18 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export async function login(username: string, password: string) {
-  return request<{ token: string; username: string; role: Role; department: string }>("/api/login", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ username, password }),
-  });
+  return request<{ token: string; username: string; role: Role; department: string; teams: TeamGrant[] }>(
+    "/api/login",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password }),
+    },
+  );
 }
 
 export function me() {
-  return request<{ username: string; role: Role; department: string }>("/api/me");
+  return request<{ username: string; role: Role; department: string; teams: TeamGrant[] }>("/api/me");
 }
 
 export function getConfig() {
