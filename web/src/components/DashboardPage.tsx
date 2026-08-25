@@ -199,8 +199,12 @@ function PlannedCard({ icon, name }: { icon: string; name: string }) {
   );
 }
 
-// role/catalogs are config-driven (operator-set role/catalog labels), not a
-// live Trino GRANT lookup — only "connected" reflects a real check.
+// role is the account's single overall resolved role (highest-precedence
+// across every LDAP group it's in — see auth.ResolveRole), never per-team.
+// catalogs are the deduplicated union across every team in `teams` (via
+// OPA's live teams map) when the account has team-scoped groups, otherwise
+// the operator-configured flat list — see internal/api's /api/trino
+// handler. Only "connected" reflects a real Trino check either way.
 function TrinoCard({ trino }: { trino: TrinoIntegration }) {
   if (!trino.enabled) return <PlannedCard icon="T" name="Trino" />;
 
@@ -223,6 +227,12 @@ function TrinoCard({ trino }: { trino: TrinoIntegration }) {
           <dt>역할</dt>
           <dd>{trino.role}</dd>
         </div>
+        {trino.teams && trino.teams.length > 0 && (
+          <div className="al-row">
+            <dt>소속 팀</dt>
+            <dd>{trino.teams.join(", ")}</dd>
+          </div>
+        )}
         {trino.catalogs && trino.catalogs.length > 0 && (
           <div className="al-row">
             <dt>카탈로그</dt>
@@ -277,9 +287,12 @@ function OpaCard({ opa }: { opa: OpaIntegration }) {
   );
 }
 
-// role/buckets are config-driven (operator-set labels), not a live bucket
-// policy lookup — only "connected" reflects a real AssumeRoleWithLDAPIdentity
-// check against the S3 endpoint. See internal/s3iam.
+// role is the account's single overall resolved role, never per-team (same
+// as Trino's card). buckets are the deduplicated union across every team in
+// `teams` (via s3iam.bucketMap) when the account has team-scoped groups,
+// otherwise the operator-configured flat list — see internal/api's
+// /api/s3iam handler. Only "connected"/accessKeyId/expiresAt reflect a real
+// AssumeRoleWithLDAPIdentity check against the S3 endpoint. See internal/s3iam.
 function S3IamCard({ s3iam }: { s3iam: S3IamIntegration }) {
   if (!s3iam.enabled) return <PlannedCard icon="S3" name="S3 IAM" />;
 
@@ -302,6 +315,12 @@ function S3IamCard({ s3iam }: { s3iam: S3IamIntegration }) {
           <dt>역할</dt>
           <dd>{s3iam.role}</dd>
         </div>
+        {s3iam.teams && s3iam.teams.length > 0 && (
+          <div className="al-row">
+            <dt>소속 팀</dt>
+            <dd>{s3iam.teams.join(", ")}</dd>
+          </div>
+        )}
         {s3iam.buckets && s3iam.buckets.length > 0 && (
           <div className="al-row">
             <dt>버킷</dt>

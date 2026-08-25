@@ -50,3 +50,15 @@ func TestLoadConfigFromEnvCustomBuckets(t *testing.T) {
 		}
 	}
 }
+
+func TestLoadConfigFromEnvBucketMap(t *testing.T) {
+	t.Setenv("ACCESSLENS_S3IAM_BUCKET_BI", "team-bi")
+	t.Setenv("ACCESSLENS_S3IAM_BUCKET_ML", "team-ml, team-ml-archive")
+	cfg := LoadConfigFromEnv()
+	if got := cfg.BucketMap["bi"]; len(got) != 1 || got[0] != "team-bi" {
+		t.Errorf("BucketMap[bi] = %v, want [team-bi]", got)
+	}
+	if got := cfg.BucketMap["ml"]; len(got) != 2 || got[0] != "team-ml" || got[1] != "team-ml-archive" {
+		t.Errorf("BucketMap[ml] = %v, want [team-ml team-ml-archive]", got)
+	}
+}

@@ -32,9 +32,17 @@ type Config struct {
 	// RoleMap maps an AccessLens role to the label shown on the
 	// dashboard. Defaults to reusing the AccessLens role name unchanged.
 	RoleMap map[model.Role]string
-	// Buckets is the configured list of bucket names to display — not
+	// Buckets is the configured list of bucket names to display for
+	// accounts with no team-scoped LDAP groups (see model.TeamGrant) — not
 	// queried live from the S3 endpoint.
 	Buckets []string
+	// BucketMap maps a team name (e.g. "bi", matching model.TeamGrant.Team)
+	// to the bucket(s) that team can access. For an account with
+	// team-scoped groups, internal/api computes its displayed buckets as
+	// the union of BucketMap[team] across every team it belongs to,
+	// deduplicated — falling back to the flat Buckets list above when the
+	// account has no team grants at all.
+	BucketMap map[string][]string
 }
 
 // Enabled reports whether enough configuration is present to check S3 IAM
@@ -53,6 +61,8 @@ func (c Config) Enabled() bool {
 //	ACCESSLENS_S3IAM_ROLE_DEV       (default "dev")
 //	ACCESSLENS_S3IAM_ROLE_VIEW      (default "view")
 //	ACCESSLENS_S3IAM_BUCKETS        (comma-separated, default empty)
+//	ACCESSLENS_S3IAM_BUCKET_<TEAM>  (comma-separated, one per team — e.g.
+//	                                ACCESSLENS_S3IAM_BUCKET_BI="team-bi")
 func LoadConfigFromEnv() Config {
 	cfg := Config{
 		Endpoint:     os.Getenv("ACCESSLENS_S3IAM_ENDPOINT"),
@@ -65,13 +75,28 @@ func LoadConfigFromEnv() Config {
 		},
 		// Non-nil so the /api/s3iam response serializes as `[]`, not
 		// `null`, when no buckets are configured.
-		Buckets: []string{},
+		Buckets:   []string{},
+		BucketMap: map[string][]string{},
 	}
 	if v := os.Getenv("ACCESSLENS_S3IAM_BUCKETS"); v != "" {
 		for _, b := range strings.Split(v, ",") {
 			b = strings.TrimSpace(b)
 			if b != "" {
 				cfg.Buckets = append(cfg.Buckets, b)
+			}
+		}
+	}
+	const bucketPrefix = "ACCESSLENS_S3IAM_BUCKET_"
+	for _, kv := range os.Environ() {
+		key, value, ok := strings.Cut(kv, "=")
+		if !ok || !strings.HasPrefix(key, bucketPrefix) {
+			continue
+		}
+		team := strings.ToLower(strings.TrimPrefix(key, bucketPrefix))
+		for _, b := range strings.Split(value, ",") {
+			b = strings.TrimSpace(b)
+			if b != "" {
+				cfg.BucketMap[team] = append(cfg.BucketMap[team], b)
 			}
 		}
 	}

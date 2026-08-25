@@ -191,6 +191,10 @@ spec:
             {{- end }}
             - name: ACCESSLENS_S3IAM_BUCKETS
               value: {{ join "," .Values.s3iam.buckets | quote }}
+            {{- range $team, $buckets := .Values.s3iam.bucketMap }}
+            - name: {{ printf "ACCESSLENS_S3IAM_BUCKET_%s" ($team | upper) }}
+              value: {{ (kindIs "slice" $buckets) | ternary (join "," $buckets) $buckets | quote }}
+            {{- end }}
             {{- end }}
           {{- if and (eq .Values.mode "local") .Values.local.persistence.enabled }}
           volumeMounts:

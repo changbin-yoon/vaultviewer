@@ -3,17 +3,61 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"sort"
 
 	"github.com/accesslens/accesslens/internal/auth"
 	"github.com/accesslens/accesslens/internal/model"
 	"github.com/accesslens/accesslens/internal/opa"
 )
 
+// teamRoles converts a user's resolved team grants (see auth.ResolveTeams)
+// into the opa package's own TeamRole type, so callers here don't need
+// internal/opa to depend on internal/model.
+func teamRoles(teams []model.TeamGrant) []opa.TeamRole {
+	out := make([]opa.TeamRole, len(teams))
+	for i, t := range teams {
+		out[i] = opa.TeamRole{Team: t.Team, Role: string(t.Role)}
+	}
+	return out
+}
+
+// teamNames extracts just the team names, for the "teams" field shown on
+// the Trino/S3 IAM cards. user.Teams is already sorted by team name (see
+// auth.ResolveTeams), so this stays sorted too.
+func teamNames(teams []model.TeamGrant) []string {
+	names := make([]string, len(teams))
+	for i, t := range teams {
+		names[i] = t.Team
+	}
+	return names
+}
+
+// uniqueSorted flattens and deduplicates one or more string lists.
+func uniqueSorted(lists ...[]string) []string {
+	set := map[string]struct{}{}
+	for _, l := range lists {
+		for _, v := range l {
+			set[v] = struct{}{}
+		}
+	}
+	out := make([]string, 0, len(set))
+	for v := range set {
+		out = append(out, v)
+	}
+	sort.Strings(out)
+	return out
+}
+
 func registerIntegrationRoutes(mux *http.ServeMux, d Deps) {
-	// Dashboard status card for Trino — a connectivity check plus the
-	// operator-configured role/catalog labels (not a live GRANT lookup, see
-	// internal/trino). Always returns 200; "enabled: false" is how the
-	// frontend tells "not configured" apart from "configured but down".
+	// Dashboard status card for Trino — a connectivity check plus a
+	// catalog list. For an account with team-scoped LDAP groups (e.g.
+	// "bi-adm"), catalogs are the union of every team's catalogs from
+	// OPA's live teams map (deduplicated) — Trino's real access control is
+	// OPA in this deployment, so this is what the account can actually
+	// query, not just an operator-set label. Accounts with no team grants
+	// fall back to the flat operator-configured Trino.Catalogs list.
+	// "role" always stays the caller's single overall resolved role
+	// (highest-precedence across every group they're in), never per-team.
 	mux.HandleFunc("GET /api/trino", auth.RequireAuth(d.Sessions, func(w http.ResponseWriter, r *http.Request, user model.User) {
 		w.Header().Set("Content-Type", "application/json")
 		if !d.Trino.Enabled() {
@@ -24,25 +68,43 @@ func registerIntegrationRoutes(mux *http.ServeMux, d Deps) {
 		if err != nil {
 			connected = false
 		}
+		catalogs := d.Trino.Catalogs
+		if len(user.Teams) > 0 && d.Opa.Enabled() {
+			if grants, err := d.OpaClient.ResolveTeams(r.Context(), teamRoles(user.Teams)); err == nil {
+				lists := make([][]string, len(grants))
+				for i, g := range grants {
+					lists[i] = g.Catalogs
+				}
+				catalogs = uniqueSorted(lists...)
+			}
+		}
 		json.NewEncoder(w).Encode(map[string]any{
 			"enabled":   true,
 			"connected": connected,
 			"role":      d.Trino.RoleMap[user.Role],
-			"catalogs":  d.Trino.Catalogs,
+			"catalogs":  catalogs,
+			"teams":     teamNames(user.Teams),
 		})
 	}))
 
-	// Dashboard status card for OPA — resolves the caller's mapped LDAP
-	// group against OPA's live grants document (see internal/opa). One
-	// step more live than Trino's card: team/catalogs/operations come from
-	// OPA itself, not AccessLens's own Helm values.
+	// Dashboard status card for OPA — resolves the caller's live grants
+	// document (see internal/opa). An account with team-scoped LDAP groups
+	// resolves each team directly by name (ResolveTeams); an account
+	// without any (e.g. plain "adm") falls back to the legacy
+	// role->group->wildcard-team resolution (Resolve).
 	mux.HandleFunc("GET /api/opa", auth.RequireAuth(d.Sessions, func(w http.ResponseWriter, r *http.Request, user model.User) {
 		w.Header().Set("Content-Type", "application/json")
 		if !d.Opa.Enabled() {
 			json.NewEncoder(w).Encode(map[string]bool{"enabled": false})
 			return
 		}
-		grants, err := d.OpaClient.Resolve(r.Context(), d.Opa.GroupMap[user.Role])
+		var grants []opa.Grant
+		var err error
+		if len(user.Teams) > 0 {
+			grants, err = d.OpaClient.ResolveTeams(r.Context(), teamRoles(user.Teams))
+		} else {
+			grants, err = d.OpaClient.Resolve(r.Context(), d.Opa.GroupMap[user.Role])
+		}
 		if err != nil {
 			json.NewEncoder(w).Encode(map[string]any{"enabled": true, "connected": false})
 			return
@@ -59,8 +121,10 @@ func registerIntegrationRoutes(mux *http.ServeMux, d Deps) {
 
 	// Dashboard status card for S3 IAM — a connectivity check (does the
 	// fixed LDAP service account still successfully AssumeRoleWithLDAPIdentity
-	// against the S3 endpoint) plus operator-configured role/bucket labels,
-	// same shape as Trino's card (see internal/s3iam).
+	// against the S3 endpoint) plus a bucket list. Same team-union pattern
+	// as Trino's catalogs: an account with team-scoped groups gets the
+	// union of S3Iam.BucketMap[team] across every team it belongs to
+	// (deduplicated); otherwise the flat operator-configured Buckets list.
 	mux.HandleFunc("GET /api/s3iam", auth.RequireAuth(d.Sessions, func(w http.ResponseWriter, r *http.Request, user model.User) {
 		w.Header().Set("Content-Type", "application/json")
 		if !d.S3Iam.Enabled() {
@@ -71,11 +135,22 @@ func registerIntegrationRoutes(mux *http.ServeMux, d Deps) {
 		if err != nil {
 			creds = nil
 		}
+		buckets := d.S3Iam.Buckets
+		if len(user.Teams) > 0 {
+			lists := make([][]string, len(user.Teams))
+			for i, t := range user.Teams {
+				lists[i] = d.S3Iam.BucketMap[t.Team]
+			}
+			if unioned := uniqueSorted(lists...); len(unioned) > 0 {
+				buckets = unioned
+			}
+		}
 		resp := map[string]any{
 			"enabled":   true,
 			"connected": creds != nil,
 			"role":      d.S3Iam.RoleMap[user.Role],
-			"buckets":   d.S3Iam.Buckets,
+			"buckets":   buckets,
+			"teams":     teamNames(user.Teams),
 		}
 		// accessKeyId/expiresAt are the temporary STS session's own
 		// identifier and expiry — not a secret on their own (no secret key

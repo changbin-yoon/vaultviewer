@@ -104,3 +104,44 @@ func TestResolveUnreachable(t *testing.T) {
 		t.Fatalf("expected an error dialing a closed port")
 	}
 }
+
+func TestResolveTeamsLooksUpByTeamNameNotGroupCN(t *testing.T) {
+	srv := newTestServer(t)
+	c := NewClient(Config{Endpoint: strings.TrimPrefix(srv.URL, "http://")})
+
+	// "bi-adm" isn't a key in testGrantsDoc's groups map at all (only
+	// "dt-bi-adm" is) — ResolveTeams must still resolve it via the team
+	// name "bi" directly, proving it doesn't depend on OPA's groups map.
+	grants, err := c.ResolveTeams(context.Background(), []TeamRole{
+		{Team: "bi", Role: "adm"},
+		{Team: "ml", Role: "view"},
+	})
+	if err != nil {
+		t.Fatalf("ResolveTeams: %v", err)
+	}
+	if len(grants) != 2 {
+		t.Fatalf("expected 2 grants, got %d: %+v", len(grants), grants)
+	}
+	if grants[0].Team != "bi" || len(grants[0].Catalogs) != 2 {
+		t.Errorf("grants[0] = %+v, want team=bi with 2 catalogs", grants[0])
+	}
+	if grants[1].Team != "ml" || len(grants[1].Catalogs) != 1 || grants[1].Catalogs[0] != "ml" {
+		t.Errorf("grants[1] = %+v, want team=ml with catalogs=[ml]", grants[1])
+	}
+	if len(grants[1].Operations) != 1 || grants[1].Operations[0] != "SelectFromColumns" {
+		t.Errorf("grants[1].Operations = %v, want [SelectFromColumns] (role_ops[view])", grants[1].Operations)
+	}
+}
+
+func TestResolveTeamsEmptyInputReturnsNoGrantsNoError(t *testing.T) {
+	srv := newTestServer(t)
+	c := NewClient(Config{Endpoint: strings.TrimPrefix(srv.URL, "http://")})
+
+	grants, err := c.ResolveTeams(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("ResolveTeams: %v", err)
+	}
+	if len(grants) != 0 {
+		t.Errorf("expected no grants for empty input, got %v", grants)
+	}
+}

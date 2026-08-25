@@ -108,6 +108,9 @@ export interface TrinoIntegration {
   connected?: boolean;
   role?: string;
   catalogs?: string[];
+  // Team names the account belongs to (see TeamGrant) — catalogs above are
+  // already the deduplicated union across all of them when present.
+  teams?: string[];
 }
 
 export function getTrinoIntegration() {
@@ -142,6 +145,9 @@ export interface S3IamIntegration {
   connected?: boolean;
   role?: string;
   buckets?: string[];
+  // Team names the account belongs to (see TeamGrant) — buckets above are
+  // already the deduplicated union across all of them when present.
+  teams?: string[];
   // The temporary STS session's own access key ID + expiry (no secret key
   // or session token — those are never sent to the frontend). Proof the
   // connectivity check produced a real, live session, not just that the

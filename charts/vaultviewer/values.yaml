@@ -7,7 +7,7 @@ image:
   # 채우면 harbor.internal:5000/yoochabi/vaultviewer:<tag>를 사용.
   registry: ""
   repository: yoochabi/vaultviewer
-  tag: "0.1.49"
+  tag: "0.1.50"
   pullPolicy: IfNotPresent
 
 # airgapped 클러스터의 프라이빗 레지스트리가 인증을 요구하면 여기에
@@ -201,8 +201,20 @@ s3iam:
     adm: "adm"
     dev: "dev"
     view: "view"
-  # 대시보드에 표시할 버킷 이름 목록 (S3에서 라이브 조회하지 않음).
+  # 대시보드에 표시할 버킷 이름 목록 — 계정에 팀 그룹(bucketMap 참고)이 없을
+  # 때만 쓰이는 기본값 (S3에서 라이브 조회하지 않음).
   buckets: []
+  # LDAP 그룹 CN이 "<팀>-<역할>" 패턴(예: bi-adm)이면, 그 계정의 버킷 목록은
+  # 여기서 소속된 모든 팀의 버킷을 합쳐 중복 제거한 값으로 자동 계산됩니다
+  # (여러 팀에 속하면 그만큼 유니크하게 합쳐짐) — 위 buckets는 팀 그룹이
+  # 전혀 없는 계정에만 fallback으로 쓰입니다. 팀 이름은 디렉토리 그룹
+  # CN에서 그대로 오므로 값(버킷 이름)만 실제 환경에 맞게 채우세요:
+  # bucketMap:
+  #   bi:
+  #     - "team-bi"
+  #   ml:
+  #     - "team-ml"
+  bucketMap: {}
 
 # -- Networking --------------------------------------------------------
 service:

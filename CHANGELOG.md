@@ -4,6 +4,23 @@ AccessLens(이전 이름: VaultViewer)의 주요 변경 사항을 최신순으�
 번호는 Docker 이미지 태그(`yoochabi/vaultviewer:<version>`)이자 Helm 차트의
 `appVersion`입니다.
 
+## 0.1.50
+
+- 여러 팀 그룹에 속한 계정의 권한 표시 개선.
+  - Trino/S3 IAM 대시보드 카드에 "소속 팀" 행 추가(여러 팀이면 전부 표시).
+    "역할"은 계속 계정 전체의 최상위 권한(기존 우선순위 로직) 그대로.
+  - Trino의 "카탈로그"와 S3 IAM의 "버킷" 목록을, 팀 그룹이 있는 계정은
+    소속된 모든 팀의 값을 합쳐 **중복 제거한 유니크 값**으로 계산하도록
+    변경 — 팀 그룹이 없는 계정은 기존처럼 고정 목록(fallback) 그대로.
+  - Trino 카탈로그는 OPA의 실시간 `teams` 맵을 팀 이름으로 직접 조회
+    (`internal/opa.Client.ResolveTeams` 신규) — 기존 `Resolve`는 OPA
+    정책의 `groups` 맵에 등록된 LDAP 그룹명(예: `dt-bi-adm`)에 의존했는데,
+    새 팀 그룹(`bi-adm` 등)은 그 맵에 없어서 우회. OPA 카드 자체도 팀
+    그룹이 있으면 이 방식으로 전환(더 정확한 팀별 grants).
+  - S3 IAM 버킷은 신규 `s3iam.bucketMap`(Helm) 설정으로 팀→버킷 매핑을
+    받아 계산 — cluster-mesh1엔 bi/ml/ops → team-bi/team-ml/team-ops로
+    설정.
+
 ## 0.1.49
 
 - S3 IAM 대시보드 카드에 연결 확인 시 발급된 임시 STS 세션의 Access Key ID와
