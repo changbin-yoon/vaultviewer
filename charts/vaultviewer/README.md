@@ -198,6 +198,80 @@ deploymentLabel: "CLUSTER-PROD"   # 다른 클러스터용 values 파일엔 "CLU
 그룹에도 속해 있으면(멀티 팀) 카탈로그는 `bi`/`bi_mart`/`ml`, 버킷은
 `team-bi`/`team-ml`로 두 팀 값이 합쳐집니다.
 
+## S3 IAM — 버킷별 권한 내역과 선언 대조
+
+위 `bucketMap`은 "어느 버킷이 보이는가"까지만 답합니다. 정책 사본을 함께
+주면 **버킷마다 무엇을 할 수 있는지**(목록/읽기/쓰기/삭제…)와 그 권한이
+**어느 정책에서 왔는지**를 카드에 표시합니다.
+
+입력이 두 개이고 **둘 다 있어야** 합니다. 정책 문서(`*.json`)는 "그 정책이
+무엇을 허용하는가"를, attach 선언(`attachments.yaml`)은 "누가 그 정책을 들고
+있는가"를 말합니다. 한쪽만으로는 아무 것도 계산되지 않습니다.
+
+```sh
+kubectl -n <ns> create configmap accesslens-policies \
+  --from-file=policy/generated/ --from-file=policy/attachments.yaml
+```
+
+```yaml
+s3iam:
+  policies:
+    existingConfigMap: accesslens-policies
+    mountPath: /etc/accesslens/s3iam-policies   # 기본값
+    attachmentsKey: attachments.yaml            # 기본값
+```
+
+정책 파일을 차트에 복사하지 않고 ConfigMap을 참조하는 이유는, 같은 문서가 두
+곳에 있으면 반드시 갈라지기 때문입니다. **MinIO에 정책을 적용할 때 쓰는 그
+파일로 ConfigMap을 만들어 가리키세요.** 비워두면 권한 내역만 빠지고 카드의
+나머지(연결 확인, 버킷 목록)는 그대로 동작합니다.
+
+attach 선언은 MinIO가 자기 상태를 보고하는 모양과 같습니다 — 그룹 **DN**
+기준이고, 한 그룹이 여러 정책을, 한 정책이 여러 그룹을 가질 수 있으며,
+사용자 DN에 직접 붙는 것도 표현됩니다:
+
+```yaml
+attachments:
+  - policy: bi-dev
+    groups: ["cn=bi-dev,ou=groups,dc=example,dc=com"]
+```
+
+### 선언 대조 (드리프트 검사)
+
+선언은 "이래야 한다"이지 "실제로 이렇다"가 아닙니다. `s3iam.drift`에 자격
+증명을 주면 **관리자 화면에서 백엔드 실물과 대조**할 수 있습니다:
+
+```yaml
+s3iam:
+  drift:
+    existingSecret: vaultviewer-s3iam-admin   # accessKey / secretKey 키
+```
+
+두 방향을 구분해 보고합니다:
+
+- **선언에 없음** — 백엔드가 아무도 적어두지 않은 attach를 들고 있습니다.
+  선언만 읽어서는 영원히 보이지 않는 쪽이라 더 위험합니다.
+- **미적용** — 선언에는 있는데 백엔드에 없습니다. 화면이 실제로는 없는
+  권한을 약속하고 있다는 뜻입니다.
+
+필요한 권한은 **`admin:ListUsers`와 `admin:GetPolicy` 둘뿐**이며, 이 조합으로는
+객체 데이터를 읽을 수 없습니다. `admin:*`를 주지 마세요.
+
+```json
+{"Version":"2012-10-17","Statement":[{"Effect":"Allow",
+  "Action":["admin:ListUsers","admin:GetPolicy"],
+  "Resource":["arn:aws:s3:::*"]}]}
+```
+
+```sh
+kubectl -n <ns> create secret generic vaultviewer-s3iam-admin \
+  --from-literal=accessKey='<ak>' --from-literal=secretKey='<sk>'
+```
+
+비워두면 대조 기능만 비활성되고 나머지는 그대로입니다. 대조는 관리자가
+버튼을 눌렀을 때만 실행됩니다 — 라이브 admin 호출이라 대시보드가 뜰 때마다
+모든 사용자에 대해 돌 일이 아닙니다.
+
 ## S3/MinIO 백업 (local 모드)
 
 `mode: local`은 PVC 하나에 모든 데이터가 있어서, PVC가 잘못되면(StorageClass가
