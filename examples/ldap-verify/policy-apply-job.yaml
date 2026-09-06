@@ -1,0 +1,36 @@
+# policy/generated/*.json 을 MinIO에 일괄 적용하는 일회성 Job.
+# apply-policies.sh가 만들어 두는 accesslens-policies configmap을 읽는다.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: accesslens-policy-apply
+  namespace: minio-verify
+spec:
+  ttlSecondsAfterFinished: 600
+  backoffLimit: 1
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: mc
+          image: minio/mc:latest
+          env:
+            - name: ROOT_USER
+              valueFrom: { secretKeyRef: { name: minio-root-creds, key: rootUser } }
+            - name: ROOT_PASSWORD
+              valueFrom: { secretKeyRef: { name: minio-root-creds, key: rootPassword } }
+          volumeMounts:
+            - { name: policies, mountPath: /policies }
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -e
+              mc alias set t http://minio.minio-verify.svc.cluster.local:9000 "$ROOT_USER" "$ROOT_PASSWORD"
+              for f in /policies/*.json; do
+                name=$(basename "$f" .json)
+                echo "=== $name ==="
+                mc admin policy create t "$name" "$f"
+              done
+      volumes:
+        - name: policies
+          configMap: { name: accesslens-policies }

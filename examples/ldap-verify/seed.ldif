@@ -1,0 +1,101 @@
+# AccessLens / MinIO 검증용 디렉토리 seed.
+#
+# 그룹 CN은 MinIO에 이미 attach된 정책 매핑(cn=<team>-<tier>,ou=groups,...)과
+# 정확히 일치해야 한다 — MinIO 쪽 매핑을 바꾸는 대신 디렉토리를 거기 맞춘다.
+# AccessLens의 auth.ResolveTeams도 같은 "<team>-<role>" 규칙을 파싱하므로
+# 이 이름 하나로 두 시스템이 동시에 맞는다.
+
+dn: ou=users,dc=example,dc=com
+objectClass: organizationalUnit
+ou: users
+
+dn: ou=groups,dc=example,dc=com
+objectClass: organizationalUnit
+ou: groups
+
+# groupOfNames는 member가 최소 1개 필요하다. 실제 구성원이 없는 그룹을 위한
+# 자리표시자 — 존재하지 않는 DN이라 어떤 사용자와도 매칭되지 않는다.
+dn: cn=placeholder,ou=users,dc=example,dc=com
+objectClass: inetOrgPerson
+cn: placeholder
+sn: placeholder
+uid: placeholder
+description: groupOfNames의 최소 member 제약을 채우기 위한 더미. 로그인 불가.
+
+dn: uid=ycb,ou=users,dc=example,dc=com
+objectClass: inetOrgPerson
+cn: YCB Admin
+sn: Admin
+uid: ycb
+o: DataPlatform
+userPassword: __USER_PASSWORD__
+
+dn: uid=ycb_dev,ou=users,dc=example,dc=com
+objectClass: inetOrgPerson
+cn: YCB Dev
+sn: Dev
+uid: ycb_dev
+o: DataPlatform
+userPassword: __USER_PASSWORD__
+
+dn: uid=ycb_view,ou=users,dc=example,dc=com
+objectClass: inetOrgPerson
+cn: YCB Viewer
+sn: Viewer
+uid: ycb_view
+o: DataPlatform
+userPassword: __USER_PASSWORD__
+
+dn: uid=hsycb3650,ou=users,dc=example,dc=com
+objectClass: inetOrgPerson
+cn: Verify User
+sn: User
+uid: hsycb3650
+o: DataPlatform
+userPassword: __USER_PASSWORD__
+
+dn: cn=bi-adm,ou=groups,dc=example,dc=com
+objectClass: groupOfNames
+cn: bi-adm
+member: uid=ycb,ou=users,dc=example,dc=com
+
+dn: cn=bi-dev,ou=groups,dc=example,dc=com
+objectClass: groupOfNames
+cn: bi-dev
+member: uid=ycb_dev,ou=users,dc=example,dc=com
+
+dn: cn=bi-view,ou=groups,dc=example,dc=com
+objectClass: groupOfNames
+cn: bi-view
+member: uid=ycb_view,ou=users,dc=example,dc=com
+
+dn: cn=ml-adm,ou=groups,dc=example,dc=com
+objectClass: groupOfNames
+cn: ml-adm
+member: uid=hsycb3650,ou=users,dc=example,dc=com
+
+dn: cn=ml-dev,ou=groups,dc=example,dc=com
+objectClass: groupOfNames
+cn: ml-dev
+member: uid=placeholder,ou=users,dc=example,dc=com
+
+# ycb_dev가 bi-dev + ml-view 두 팀에 걸치게 해서 다중 팀 합집합 경로를 실제로 태운다.
+dn: cn=ml-view,ou=groups,dc=example,dc=com
+objectClass: groupOfNames
+cn: ml-view
+member: uid=ycb_dev,ou=users,dc=example,dc=com
+
+dn: cn=ops-adm,ou=groups,dc=example,dc=com
+objectClass: groupOfNames
+cn: ops-adm
+member: uid=hsycb3650,ou=users,dc=example,dc=com
+
+dn: cn=ops-dev,ou=groups,dc=example,dc=com
+objectClass: groupOfNames
+cn: ops-dev
+member: uid=placeholder,ou=users,dc=example,dc=com
+
+dn: cn=ops-view,ou=groups,dc=example,dc=com
+objectClass: groupOfNames
+cn: ops-view
+member: uid=ycb_view,ou=users,dc=example,dc=com

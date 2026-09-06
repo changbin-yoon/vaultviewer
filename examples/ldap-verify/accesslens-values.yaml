@@ -1,0 +1,61 @@
+# cluster-mesh2 검증 배포용 AccessLens 값.
+#
+# 비밀번호는 들어 있지 않다. 아래 세 Secret을 먼저 만들 것:
+#   kubectl -n accesslens create secret generic vaultviewer-ldap \
+#     --from-literal=bind-password='<LDAP admin 비밀번호>'
+#   kubectl -n accesslens create secret generic vaultviewer-session \
+#     --from-literal=session-secret="$(openssl rand -hex 32)"
+#   kubectl -n accesslens create secret generic vaultviewer-s3iam \
+#     --from-literal=ldapUsername='ycb_view' --from-literal=ldapPassword='<해당 계정 비밀번호>'
+image:
+  tag: "0.1.51-dev1"
+
+mode: local
+deploymentLabel: "cluster-mesh2"
+
+local:
+  persistence:
+    enabled: true
+    size: 2Gi
+    mountPath: /data
+
+ldap:
+  # 클러스터 밖 LDAP 서버. 노드 IP/NodePort를 쓰지 않는 이유는
+  # minio-ldap.sh의 주석 참고.
+  host: "10.10.105.4"
+  port: 389
+  tls: false
+  baseDN: "dc=example,dc=com"
+  userOU: "ou=users"
+  groupOU: "ou=groups"
+  bindDN: "cn=admin,dc=example,dc=com"
+  existingSecret: vaultviewer-ldap
+  existingSecretKey: bind-password
+  # 그룹 CN이 "<팀>-<역할>" 규칙이라 역할마다 세 팀을 모두 나열한다.
+  # 이 이름들은 MinIO에 attach된 정책명과 1:1로 같다 — seed.ldif가 그렇게
+  # 맞춰져 있고, 그래야 AccessLens의 권한 미러가 성립한다.
+  groupRoleMap:
+    adm: "bi-adm,ml-adm,ops-adm"
+    dev: "bi-dev,ml-dev,ops-dev"
+    view: "bi-view,ml-view,ops-view"
+
+session:
+  existingSecret: vaultviewer-session
+  existingSecretKey: session-secret
+
+s3iam:
+  endpoint: "minio.minio-verify.svc.cluster.local:9000"
+  existingSecret: vaultviewer-s3iam
+  bucketMap:
+    bi: ["team-bi"]
+    ml: ["team-ml"]
+    ops: ["team-ops"]
+
+opa:
+  enabled: false
+trino:
+  enabled: false
+
+service:
+  type: ClusterIP
+  port: 8080
