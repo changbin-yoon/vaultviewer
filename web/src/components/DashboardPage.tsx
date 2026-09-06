@@ -135,13 +135,6 @@ function ConnectionDiagram({
             r={30}
             style={{ "--al-delay": `${0.35 + i * 0.12}s` } as DelayStyle}
           />
-          <circle
-            className={`al-scale ${s.live ? "al-sat-status-live" : "al-sat-status-planned"}`}
-            cx={s.x + 19}
-            cy={s.y - (s.y > CENTER.y ? -18 : 18)}
-            r={5}
-            style={{ "--al-delay": `${0.55 + i * 0.12}s` } as DelayStyle}
-          />
           <text
             className="al-node-label"
             x={s.x}

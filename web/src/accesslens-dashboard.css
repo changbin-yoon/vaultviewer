@@ -135,8 +135,6 @@ svg.al-diagram { width: 100%; height: auto; }
 
 .al-sat-ring { fill: var(--al-surface); stroke: var(--al-border); stroke-width: 1.5; }
 .al-sat-ring.live { stroke: var(--al-accent); }
-.al-sat-status-live { fill: var(--al-good); }
-.al-sat-status-planned { fill: var(--al-surface); stroke: var(--al-text-faint); stroke-width: 1.3; }
 .al-center-ring { fill: var(--al-accent); }
 
 .al-diagram-entry circle, .al-diagram-entry path, .al-diagram-entry text {
