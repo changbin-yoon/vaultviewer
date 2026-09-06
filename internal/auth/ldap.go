@@ -90,9 +90,17 @@ func (a *LDAPAuthenticator) Authenticate(username, password string) (*model.User
 		return nil, err
 	}
 
-	groups, err := a.lookupGroupCNs(search, userDN, username)
+	groups, err := a.lookupGroups(search, userDN, username)
 	if err != nil {
 		return nil, err
+	}
+	groupCNs := make([]string, 0, len(groups))
+	groupDNs := make([]string, 0, len(groups))
+	for _, g := range groups {
+		if g.CN != "" {
+			groupCNs = append(groupCNs, g.CN)
+		}
+		groupDNs = append(groupDNs, g.DN)
 	}
 
 	// Verify the supplied password with a separate bind as the user,
@@ -111,7 +119,7 @@ func (a *LDAPAuthenticator) Authenticate(username, password string) (*model.User
 		return nil, fmt.Errorf("verify user credentials: %w", err)
 	}
 
-	role, ok := ResolveRole(groups, a.cfg.GroupRoleMap)
+	role, ok := ResolveRole(groupCNs, a.cfg.GroupRoleMap)
 	if !ok {
 		return nil, ErrNoRole
 	}
@@ -119,8 +127,10 @@ func (a *LDAPAuthenticator) Authenticate(username, password string) (*model.User
 	return &model.User{
 		Username:   username,
 		Role:       role,
-		Department: a.resolveDepartment(groups, department),
-		Teams:      ResolveTeams(groups),
+		Department: a.resolveDepartment(groupCNs, department),
+		Teams:      ResolveTeams(groupCNs),
+		DN:         userDN,
+		GroupDNs:   groupDNs,
 	}, nil
 }
 
@@ -171,7 +181,16 @@ func (a *LDAPAuthenticator) lookupUser(conn *goldap.Conn, username string) (dn, 
 	return entry.DN, entry.GetAttributeValue("o"), nil
 }
 
-func (a *LDAPAuthenticator) lookupGroupCNs(conn *goldap.Conn, userDN, username string) ([]string, error) {
+// Group is one LDAP group a user belongs to. Both spellings are kept: the
+// CN drives role/team resolution (a naming convention this app defines),
+// while the DN is what an external system such as MinIO keys its policy
+// attachments on.
+type Group struct {
+	DN string
+	CN string
+}
+
+func (a *LDAPAuthenticator) lookupGroups(conn *goldap.Conn, userDN, username string) ([]Group, error) {
 	filter, err := a.buildGroupFilter(userDN, username)
 	if err != nil {
 		return nil, err
@@ -187,13 +206,11 @@ func (a *LDAPAuthenticator) lookupGroupCNs(conn *goldap.Conn, userDN, username s
 	if err != nil {
 		return nil, fmt.Errorf("search groups for %q: %w", userDN, err)
 	}
-	cns := make([]string, 0, len(result.Entries))
+	groups := make([]Group, 0, len(result.Entries))
 	for _, entry := range result.Entries {
-		if cn := entry.GetAttributeValue("cn"); cn != "" {
-			cns = append(cns, cn)
-		}
+		groups = append(groups, Group{DN: entry.DN, CN: entry.GetAttributeValue("cn")})
 	}
-	return cns, nil
+	return groups, nil
 }
 
 // buildGroupFilter renders a.groupFilterTmpl with the escaped user DN/uid.

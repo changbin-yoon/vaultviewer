@@ -43,6 +43,14 @@ type TeamGrant struct {
 type User struct {
 	Username string
 	Role     Role
+	// DN is the user's own LDAP distinguished name, and GroupDNs the DNs of
+	// the groups they belong to. These carry the identity in the form the
+	// S3 backend actually keys policy attachments on — MinIO attaches to a
+	// group DN, not a CN — so permission lookups can match exactly instead
+	// of inferring from a group-name convention (see internal/s3iam's
+	// Attachments).
+	DN       string
+	GroupDNs []string
 	// Department is the LDAP "o" (organizationName) attribute, shown in the
 	// UI as the user's affiliation. Empty if the directory entry doesn't set it.
 	Department string
