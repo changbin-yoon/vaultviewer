@@ -9,7 +9,8 @@ LDAP 기반 RBAC를 지원하는 웹 시크릿/권한 뷰어. 로컬 파일(마�
 - **백엔드**: Go (`cmd/server`, `internal/`) — LDAP 인증/RBAC(그룹 검색 필터·역할·팀
   매핑까지 설정 가능), 감사 로그, 로컬/K8s 스토리지 엔진, S3/MinIO 델타 백업
 - **프론트엔드**: React + Tailwind (`web/`) — 옵시디언 스타일 마크다운(위키링크, 콜아웃,
-  Mermaid), 그래프 뷰, 태그, 역할/팀별 권한을 보여주는 대시보드
+  Mermaid), 그래프 뷰, 태그, 역할/팀별 권한(Trino 카탈로그·S3 버킷도 소속 팀
+  기준으로 유니크 계산)을 보여주는 대시보드
 - **AI agent 연동**: `cmd/mcp-server` — [아래](#ai-agent-연동-mcp-서버) 참고
 - **배포**: Helm 차트 (`charts/vaultviewer/`) — 값 하나하나에 대한 자세한 설명은
   [charts/vaultviewer/README.md](charts/vaultviewer/README.md) 참고. 이 문서는
@@ -72,7 +73,11 @@ cp charts/vaultviewer/values-example.yaml my-values.yaml
 자체의 LDAP 필터(예: AD/posixGroup 등 다른 스키마)를 바꿔야 하면
 `ldap.groupSearchFilter`를 설정하세요 — 둘 다 값 파일에 예시 주석이 있습니다. 그룹
 CN이 `<팀>-<역할>` 패턴(예: `bi-adm`)이면 대시보드가 자동으로 "소속 팀 및 권한"을
-보여줍니다 — 별도 설정 불필요, 그룹 CN 명명 규칙만 맞으면 됩니다.
+보여줍니다 — 별도 설정 불필요, 그룹 CN 명명 규칙만 맞으면 됩니다. Trino/S3 IAM
+카드의 카탈로그·버킷도 이 팀 이름 기준으로 유니크하게 계산되는데, 그 계산에 쓰는
+`trino.catalogs`/`s3iam.bucketMap` 설정은
+[charts/vaultviewer/README.md](charts/vaultviewer/README.md#trino--opa--s3-iam-카드--팀별-카탈로그버킷)
+참고.
 
 ### 4. 설치
 

@@ -179,6 +179,21 @@ func registerIntegrationRoutes(mux *http.ServeMux, d Deps) {
 			if derived := access.BucketNames(); len(derived) > 0 {
 				resp["buckets"] = derived
 			}
+
+			// Live verification, when enabled: ask the backend what this
+			// user can actually do, using the session issued for this same
+			// user. creds is the only thing that makes the answer about
+			// them rather than about AccessLens.
+			if d.S3IamProber != nil && creds != nil {
+				if probes, err := d.S3IamProber.Probe(r.Context(), *creds, access.BucketNames()); err != nil {
+					// Reported, not silently dropped: a missing verification
+					// column would read as "not checked" when in fact the
+					// check broke.
+					resp["probeError"] = err.Error()
+				} else {
+					resp["probes"] = probes
+				}
+			}
 		}
 		// accessKeyId/expiresAt are the temporary STS session's own
 		// identifier and expiry — not a secret on their own (no secret key

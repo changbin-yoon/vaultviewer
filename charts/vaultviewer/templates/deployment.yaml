@@ -201,6 +201,26 @@ spec:
             - name: ACCESSLENS_S3IAM_ATTACHMENTS
               value: {{ printf "%s/%s" .Values.s3iam.policies.mountPath .Values.s3iam.policies.attachmentsKey | quote }}
             {{- end }}
+            {{- if .Values.s3iam.probe.enabled }}
+            - name: ACCESSLENS_S3IAM_PROBE
+              value: "true"
+            {{- if .Values.s3iam.probe.write }}
+            - name: ACCESSLENS_S3IAM_PROBE_WRITE
+              value: "true"
+            {{- end }}
+            {{- if .Values.s3iam.probe.masterExistingSecret }}
+            - name: ACCESSLENS_S3IAM_MASTER_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.s3iam.probe.masterExistingSecret }}
+                  key: {{ .Values.s3iam.probe.masterAccessKeyKey }}
+            - name: ACCESSLENS_S3IAM_MASTER_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.s3iam.probe.masterExistingSecret }}
+                  key: {{ .Values.s3iam.probe.masterSecretKeyKey }}
+            {{- end }}
+            {{- end }}
             {{- end }}
           {{- $mountData := and (eq .Values.mode "local") .Values.local.persistence.enabled }}
           {{- $mountPolicies := and .Values.s3iam.endpoint .Values.s3iam.policies.existingConfigMap }}

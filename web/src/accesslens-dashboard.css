@@ -251,3 +251,22 @@ svg.al-arch { width: 100%; height: auto; }
   background: var(--al-warn-soft, #fff6e5); border-radius: 6px; padding: 7px 9px;
   display: flex; flex-direction: column; gap: 4px;
 }
+
+/* 라이브 검증 표식. 정책 계산 결과 옆에 "실제로 확인했는가"를 붙인다. */
+.al-probe {
+  font-style: normal; font-size: 0.6rem; margin-left: 4px; opacity: 0.85;
+}
+.al-probe-ok::before { content: "✓"; margin-right: 2px; }
+/* 정책 계산과 실측이 어긋난 경우. 한쪽을 조용히 고르지 않고 드러낸다 —
+   어긋났다는 사실 자체가 알려야 할 내용이다. */
+.al-probe-conflict {
+  background: var(--al-bad, #b42318); color: #fff; border-radius: 3px;
+  padding: 0 4px; opacity: 1;
+}
+/* 프로브가 깨진 경우. deny로 접으면 없는 권한을 단언하게 된다. */
+.al-probe-error { color: var(--al-warn, #8a6100); }
+/* 정책상 없는 권한이 실제로도 거부됨을 확인한 칩. */
+.al-cap-absent {
+  background: transparent; color: var(--al-text-faint);
+  border: 1px dashed var(--al-border);
+}

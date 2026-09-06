@@ -45,6 +45,10 @@ type Deps struct {
 	// card then serves its connectivity check and bucket list as before.
 	S3IamCatalog     *s3iam.Catalog
 	S3IamAttachments *s3iam.Attachments
+	// S3IamProber verifies capabilities against the live backend using the
+	// caller's own session. Nil when probing is off — the card then reports
+	// the policy-derived answer only.
+	S3IamProber *s3iam.Prober
 
 	// ConfigInfo is served verbatim at GET /api/config (mode/backend/root
 	// or namespace, deployment label) — see cmd/server's buildEngine.

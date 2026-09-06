@@ -181,6 +181,19 @@ export interface S3Access {
   loadedAt: string;
 }
 
+// 실제로 S3 백엔드에 물어본 결과. "정책이 뭐라고 하는가"가 아니라
+// "실제로 되는가"다. error는 deny와 구분된다 — 프로브가 깨진 것을 거부로
+// 접으면 없는 권한을 있다고, 또는 있는 권한을 없다고 단언하게 된다.
+export type ProbeResult = "allow" | "deny" | "skipped" | "error";
+
+export interface S3BucketProbe {
+  bucket: string;
+  read: ProbeResult;
+  write: ProbeResult;
+  delete: ProbeResult;
+  detail?: string;
+}
+
 export interface S3IamIntegration {
   enabled: boolean;
   connected?: boolean;
@@ -198,6 +211,10 @@ export interface S3IamIntegration {
   // Absent when no policy mirror is configured — the card then shows the
   // connectivity check and bucket list only.
   access?: S3Access;
+  // Absent when live verification is off. Present per bucket when on.
+  probes?: S3BucketProbe[];
+  // Set instead of `probes` when verification itself failed.
+  probeError?: string;
 }
 
 export function getS3IamIntegration() {

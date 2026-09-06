@@ -2,8 +2,10 @@ import type { CSSProperties } from "react";
 import type {
   Config,
   OpaIntegration,
+  ProbeResult,
   Role,
   S3Access,
+  S3BucketProbe,
   S3Capability,
   S3IamIntegration,
   TeamGrant,
@@ -321,7 +323,36 @@ const DESTRUCTIVE: S3Capability[] = ["delete", "lifecycleWrite"];
 // 버킷별 권한 내역. 이 값은 MinIO에 질의한 결과가 아니라 AccessLens가 들고
 // 있는 정책 사본에서 계산한 것이라, 정책 개수와 로드 시각을 항상 함께
 // 보여줘서 "실시간"으로 오해하지 않게 한다.
-function S3AccessBreakdown({ access }: { access: S3Access }) {
+// 능력 하나가 라이브 검증 대상인지, 그렇다면 결과가 무엇인지.
+// 검증 결과와 정책 계산이 어긋나면 그 자체가 알려야 할 사실이므로
+// 조용히 한쪽을 고르지 않고 둘 다 보여준다.
+function probeMark(
+  probe: S3BucketProbe | undefined,
+  capability: S3Capability,
+  granted: boolean,
+): { label: string; className: string } | null {
+  if (!probe) return null;
+  const result: ProbeResult | undefined =
+    capability === "read" ? probe.read
+      : capability === "write" ? probe.write
+      : capability === "delete" ? probe.delete
+      : undefined;
+  if (!result || result === "skipped") return null;
+  if (result === "error") return { label: "확인불가", className: " al-probe-error" };
+  const verified = (result === "allow") === granted;
+  if (!verified) return { label: result === "allow" ? "실제 허용" : "실제 거부", className: " al-probe-conflict" };
+  return { label: "검증", className: " al-probe-ok" };
+}
+
+function S3AccessBreakdown({
+  access,
+  probes,
+  probeError,
+}: {
+  access: S3Access;
+  probes?: S3BucketProbe[];
+  probeError?: string;
+}) {
   if (access.buckets.length === 0) {
     return (
       <div className="al-access">
@@ -346,18 +377,39 @@ function S3AccessBreakdown({ access }: { access: S3Access }) {
           {new Date(access.loadedAt).toLocaleTimeString()} 기준
         </span>
       </div>
-      {access.buckets.map((b) => (
+      {access.buckets.map((b) => {
+        const probe = probes?.find((p) => p.bucket === b.bucket);
+        return (
         <div className="al-access-row" key={b.bucket}>
           <div className="al-access-bucket">{b.bucket === "*" ? "계정 전체" : b.bucket}</div>
           <div className="al-caps">
-            {b.capabilities.map((c) => (
+            {b.capabilities.map((c) => {
+              const mark = probeMark(probe, c, true);
+              return (
               <span
                 key={c}
                 className={`al-cap${DESTRUCTIVE.includes(c) ? " al-cap-destructive" : ""}`}
               >
                 {CAPABILITY_LABELS[c] ?? c}
+                {mark && <em className={`al-probe${mark.className}`}>{mark.label}</em>}
               </span>
-            ))}
+              );
+            })}
+            {/* 정책상 없는 권한도 실제로 거부되는지 확인됐다면 그 사실을 보여준다.
+                "없다"보다 "없음을 확인했다"가 감사에 훨씬 유용하다. */}
+            {probe &&
+              (["read", "write", "delete"] as S3Capability[])
+                .filter((c) => !b.capabilities.includes(c))
+                .map((c) => {
+                  const mark = probeMark(probe, c, false);
+                  if (!mark) return null;
+                  return (
+                    <span key={`deny-${c}`} className="al-cap al-cap-absent">
+                      {CAPABILITY_LABELS[c]} 없음
+                      <em className={`al-probe${mark.className}`}>{mark.label}</em>
+                    </span>
+                  );
+                })}
           </div>
           {/* 정책명만 보여주고 DN은 title에 둔다 — DN은 길어서 카드를 무너뜨리는데,
               "왜 이 권한이 있나"를 끝까지 추적하려면 필요한 값이다. */}
@@ -371,8 +423,13 @@ function S3AccessBreakdown({ access }: { access: S3Access }) {
               </span>
             ))}
           </div>
+          {probe?.detail && <div className="al-access-warn">{probe.detail}</div>}
         </div>
-      ))}
+        );
+      })}
+      {probeError && (
+        <div className="al-access-warn">라이브 검증 실패: {probeError} — 아래는 정책 기준 값입니다.</div>
+      )}
       {access.warnings && access.warnings.length > 0 && (
         <div className="al-access-warn">
           {access.warnings.map((w, i) => (
@@ -431,7 +488,9 @@ function S3IamCard({ s3iam }: { s3iam: S3IamIntegration }) {
           </div>
         )}
       </dl>
-      {s3iam.access && <S3AccessBreakdown access={s3iam.access} />}
+      {s3iam.access && (
+        <S3AccessBreakdown access={s3iam.access} probes={s3iam.probes} probeError={s3iam.probeError} />
+      )}
     </div>
   );
 }
