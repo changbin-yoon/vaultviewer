@@ -157,8 +157,11 @@ export interface S3BucketAccess {
   // arn:aws:s3:::*, which is how admin actions are scoped).
   bucket: string;
   capabilities: S3Capability[];
-  // Which team grant, through which policy, produced this row.
-  via: { groupCn: string; policy: string }[];
+  // Which LDAP subject, through which policy, produced this row. The DN is
+  // the same string MinIO keys its attachments on — "group" for one reached
+  // through group membership, "user" for a policy attached to the account's
+  // own DN.
+  via: { kind: "group" | "user"; dn: string; policy: string }[];
 }
 
 // Computed from AccessLens's mirrored copy of the MinIO policy set, NOT
@@ -172,6 +175,8 @@ export interface S3Access {
   // which direction the display is wrong in. Show these.
   warnings?: string[];
   policyCount: number;
+  // Number of declared policy-to-DN attachments backing this breakdown.
+  attachmentCount: number;
   digest: string;
   loadedAt: string;
 }

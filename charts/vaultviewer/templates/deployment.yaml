@@ -198,10 +198,8 @@ spec:
             {{- if .Values.s3iam.policies.existingConfigMap }}
             - name: ACCESSLENS_S3IAM_POLICY_DIR
               value: {{ .Values.s3iam.policies.mountPath | quote }}
-            {{- end }}
-            {{- range $grant, $policy := .Values.s3iam.policyMap }}
-            - name: {{ printf "ACCESSLENS_S3IAM_POLICY_%s" ($grant | upper | replace "-" "_") }}
-              value: {{ $policy | quote }}
+            - name: ACCESSLENS_S3IAM_ATTACHMENTS
+              value: {{ printf "%s/%s" .Values.s3iam.policies.mountPath .Values.s3iam.policies.attachmentsKey | quote }}
             {{- end }}
             {{- end }}
           {{- $mountData := and (eq .Values.mode "local") .Values.local.persistence.enabled }}

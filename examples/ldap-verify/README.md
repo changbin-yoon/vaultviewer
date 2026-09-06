@@ -34,9 +34,13 @@ LDAP이 세 소비자의 단일 신원 소스다. 클러스터 밖에 두는 이
 | `ops-dev` | `ops-dev` | (placeholder) |
 | `ops-view` | `ops-view` | `ycb_view` |
 
-**그룹 CN = MinIO 정책명**인 것이 이 설계의 핵심이다. AccessLens의
-`auth.ResolveTeams`가 `<팀>-<역할>`을 파싱하고, `s3iam` 패키지가 같은 이름으로
-정책 문서를 찾는다. 이름이 어긋나면 권한 화면이 조용히 빈다.
+그룹 CN과 정책명이 같은 것은 이 배포의 편의일 뿐, 어느 시스템도 거기에
+의존하지 않는다. MinIO는 그룹 **DN**에 정책을 붙이고, AccessLens도
+`policy/attachments.yaml`의 선언을 DN으로 대조한다 — 이름이 달라도 되고,
+한 그룹이 여러 정책을 들어도 되고, 사용자 DN에 직접 붙어도 된다.
+
+`auth.ResolveTeams`가 파싱하는 `<팀>-<역할>` 규칙은 AccessLens 자체의 역할
+(adm/dev/view)과 대시보드 팀 표시에만 쓰인다. S3 권한 계산과는 무관하다.
 
 `ycb_dev`(bi-dev + ml-view)와 `ycb_view`(bi-view + ops-view)는 일부러 두 팀에
 걸쳐 있다 — 다중 팀 합집합 경로를 실제로 태우기 위한 것이라 옮길 때 유지할 것.
@@ -56,9 +60,11 @@ LDAP_ADDR=10.10.105.4:389 LDAP_BIND_PASSWORD='...' sh minio-ldap.sh
 # 3) 팀 정책 적용
 sh apply-policies.sh
 
-# 4) 정책 사본을 AccessLens 네임스페이스에도 (카드의 권한 내역 계산용)
+# 4) 정책 사본 + attach 선언을 AccessLens 네임스페이스에도
+#    (정책 문서 = 무엇을 허용하는가, attach 선언 = 누가 들고 있는가)
 kubectl -n accesslens create configmap accesslens-policies \
-  --from-file=../../policy/generated/
+  --from-file=../../policy/generated/ \
+  --from-file=../../policy/attachments.yaml
 
 # 5) AccessLens (README 상단의 Secret 3개를 먼저 만들 것)
 helm upgrade --install accesslens ../../charts/vaultviewer \

@@ -38,7 +38,9 @@ Kubernetes Secrets를 직접 관리) 두 모드를 지원합니다.
    대시보드가 자동으로 "소속 팀 및 권한"을 팀별로 나눠 보여줍니다 — `groupRoleMap`과는
    별개의 순수 표시용 파싱이라 추가 설정이 필요 없습니다. 다만 실제로 그 그룹이
    `adm`/`dev`/`view` 권한을 갖게 하려면 여전히 `groupRoleMap`에도 등록해야 합니다
-   (팀 이름 파싱은 "표시"만, 권한 부여는 `groupRoleMap`이 담당).
+   (팀 이름 파싱은 "표시"만, 권한 부여는 `groupRoleMap`이 담당). 이 팀 이름은
+   Trino/S3 IAM 카드의 카탈로그·버킷 계산에도 쓰입니다 — 아래 [Trino/OPA/S3 IAM
+   카드 — 팀별 카탈로그·버킷](#trino--opa--s3-iam-카드--팀별-카탈로그버킷) 참고.
 
    그룹을 찾는 LDAP 검색 필터 자체(기본은 `groupOfNames`의 `member` 매칭)를 바꿔야
    한다면 `ldap.groupSearchFilter`를 템플릿으로 설정하세요 — Trino의
@@ -157,6 +159,44 @@ Ingress를 쓰려면 `values-example.yaml`의 `ingress.*` 섹션 주석을 풀�
 ```yaml
 deploymentLabel: "CLUSTER-PROD"   # 다른 클러스터용 values 파일엔 "CLUSTER-STAGING" 등
 ```
+
+## Trino / OPA / S3 IAM 카드 — 팀별 카탈로그·버킷
+
+세 카드 모두 "역할"은 항상 계정 전체의 최상위 권한(`groupRoleMap`으로 정해지는,
+여러 그룹에 걸쳐 있으면 그중 가장 높은 것)을 보여줍니다 — 팀별로 바뀌지 않습니다.
+반면 카탈로그(Trino)·버킷(S3 IAM)·grants(OPA)는 계정이 `<팀>-<역할>` 패턴의
+그룹에 속해 있으면(위 LDAP 섹션 참고) **소속된 모든 팀의 값을 합쳐 중복 제거한
+유니크 값**으로 계산됩니다. 팀 그룹이 전혀 없는 계정(예: 그냥 `adm`)은 아래
+"팀 그룹 없을 때" 값으로 그대로 fallback합니다.
+
+- **OPA** — 팀 이름을 OPA의 `teams` 문서에서 직접 조회합니다(`GET
+  /v1/data/grants`의 `teams` 맵, 예: `bi` → `{catalogs: [...]}`). OPA 쪽에
+  추가 설정이 필요 없습니다 — 이미 대시보드가 조회하는 바로 그 문서를 재사용합니다.
+- **Trino** — 카탈로그도 OPA의 `teams` 문서를 그대로 재사용합니다(Trino의 실제
+  접근 제어가 이 OPA라서, Trino 카드가 OPA와 다른 카탈로그를 보여주면 오히려
+  혼란스럽습니다). OPA 연동이 꺼져 있거나 팀 그룹이 없는 계정은 `trino.catalogs`
+  고정 목록으로 fallback:
+
+  ```yaml
+  trino:
+    catalogs: ["bi_mart", "postgresql", "tpcds", "tpch"]   # 팀 그룹 없을 때
+  ```
+- **S3 IAM** — 팀→버킷 매핑을 OPA처럼 실시간으로 가져올 데이터가 없어서, 직접
+  `s3iam.bucketMap`에 설정합니다(팀 이름은 위 LDAP 그룹에서 파싱되는 것과 동일):
+
+  ```yaml
+  s3iam:
+    buckets: ["team-bi", "team-ml", "team-ops"]   # 팀 그룹 없을 때
+    bucketMap:
+      bi: ["team-bi"]
+      ml: ["team-ml"]
+      ops: ["team-ops"]
+  ```
+
+예: `bi-adm` 계정은 Trino 카탈로그가 `bi`/`bi_mart`만, S3 버킷이 `team-bi`만
+보입니다(OPA의 `teams.bi.catalogs`, `bucketMap.bi` 참고). `bi-view`가 `ml-dev`
+그룹에도 속해 있으면(멀티 팀) 카탈로그는 `bi`/`bi_mart`/`ml`, 버킷은
+`team-bi`/`team-ml`로 두 팀 값이 합쳐집니다.
 
 ## S3/MinIO 백업 (local 모드)
 

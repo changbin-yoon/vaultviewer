@@ -11,6 +11,7 @@ set -e
 NS="${NS:-minio-verify}"
 kubectl -n "$NS" create configmap accesslens-policies \
   --from-file="$(dirname "$0")/../../policy/generated/" \
+  --from-file="$(dirname "$0")/../../policy/attachments.yaml" \
   --dry-run=client -o yaml | kubectl -n "$NS" apply -f -
 kubectl -n "$NS" delete job accesslens-policy-apply --ignore-not-found
 kubectl -n "$NS" apply -f "$(dirname "$0")/policy-apply-job.yaml"

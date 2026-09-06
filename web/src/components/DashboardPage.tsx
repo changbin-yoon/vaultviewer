@@ -328,10 +328,11 @@ function S3AccessBreakdown({ access }: { access: S3Access }) {
         <div className="al-access-head">
           <span>접근 권한</span>
           <span className="al-access-stamp">
-            정책 {access.policyCount}개 · {new Date(access.loadedAt).toLocaleTimeString()} 기준
+            정책 {access.policyCount}개 · attach {access.attachmentCount}건 ·{" "}
+            {new Date(access.loadedAt).toLocaleTimeString()} 기준
           </span>
         </div>
-        <div className="al-access-via">이 계정의 팀에 해당하는 정책이 없습니다.</div>
+        <div className="al-access-via">이 계정에 붙어 있는 정책이 없습니다.</div>
       </div>
     );
   }
@@ -341,7 +342,8 @@ function S3AccessBreakdown({ access }: { access: S3Access }) {
       <div className="al-access-head">
         <span>접근 권한</span>
         <span className="al-access-stamp">
-          정책 {access.policyCount}개 · {new Date(access.loadedAt).toLocaleTimeString()} 기준
+          정책 {access.policyCount}개 · attach {access.attachmentCount}건 ·{" "}
+          {new Date(access.loadedAt).toLocaleTimeString()} 기준
         </span>
       </div>
       {access.buckets.map((b) => (
@@ -357,7 +359,18 @@ function S3AccessBreakdown({ access }: { access: S3Access }) {
               </span>
             ))}
           </div>
-          <div className="al-access-via">via {b.via.map((v) => v.policy).join(", ")}</div>
+          {/* 정책명만 보여주고 DN은 title에 둔다 — DN은 길어서 카드를 무너뜨리는데,
+              "왜 이 권한이 있나"를 끝까지 추적하려면 필요한 값이다. */}
+          <div className="al-access-via">
+            via{" "}
+            {b.via.map((v, i) => (
+              <span key={`${v.kind}:${v.dn}:${v.policy}`} title={`${v.kind === "user" ? "사용자" : "그룹"} ${v.dn}`}>
+                {i > 0 && ", "}
+                {v.policy}
+                {v.kind === "user" && " (DN 직접)"}
+              </span>
+            ))}
+          </div>
         </div>
       ))}
       {access.warnings && access.warnings.length > 0 && (

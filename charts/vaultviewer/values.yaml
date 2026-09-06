@@ -229,13 +229,17 @@ s3iam:
   # 비워두면 권한 내역만 빠지고 카드의 나머지(연결 확인, 버킷 목록)는 그대로
   # 동작한다. 정책을 재생성했다면 이 ConfigMap과 MinIO를 함께 갱신할 것 —
   # 한쪽만 바꾸면 화면과 실제 권한이 조용히 어긋난다.
+  # ConfigMap에는 정책 문서(*.json)와 attach 선언(attachments.yaml)이 함께
+  # 들어가야 한다. 정책 문서는 "그 정책이 무엇을 허용하는가"를, attach 선언은
+  # "누가 그 정책을 들고 있는가"를 말하며 한쪽만으로는 아무 것도 계산할 수
+  # 없다:
+  #
+  #   kubectl -n <ns> create configmap accesslens-policies \
+  #     --from-file=policy/generated/ --from-file=policy/attachments.yaml
   policies:
     existingConfigMap: ""
     mountPath: /etc/accesslens/s3iam-policies
-
-  # 팀 권한("<팀>-<역할>", 예: bi-dev)을 다른 이름의 정책에 매핑해야 할 때만
-  # 채운다. 기본 규칙은 이름이 같은 것이다.
-  policyMap: {}
+    attachmentsKey: attachments.yaml
 
 # -- Networking --------------------------------------------------------
 service:
