@@ -133,6 +133,8 @@ def policy_adm(buckets):
 
 TIER_BUILDERS = {"view": policy_view, "dev": policy_dev, "adm": policy_adm}
 
+TIER_BUILDERS = {"view": policy_view, "dev": policy_dev, "adm": policy_adm}
+
 # LDAP group DNs that hold each policy. MinIO attaches policies to a group's
 # DN, so this is what AccessLens matches on too — the group *name* matching
 # the policy name is a convenience of this deployment, not something either
@@ -165,6 +167,16 @@ def attachments_doc(names):
 
 
 def main():
+    # policy/generated/ 는 평소 sync-from-minio.sh 가 MinIO에서 받아온 사본이
+    # 들어 있는 곳이다. 정책을 새로 저작할 때만 이 스크립트로 덮어쓴다.
+    # 실수로 사본을 저작본으로 밀어버리면 대시보드가 MinIO와 다른 것을
+    # 보여주게 되므로, 명시적으로 확인받는다.
+    if os.path.isdir(OUT_DIR) and os.listdir(OUT_DIR) and not os.environ.get("FORCE"):
+        print(f"{OUT_DIR} 에 이미 파일이 있습니다.")
+        print("이 디렉토리는 평소 MinIO에서 받아온 사본입니다"
+              " (examples/ldap-verify/sync-from-minio.sh).")
+        print("정책을 새로 저작해 덮어쓰려면 FORCE=1 로 다시 실행하세요.")
+        raise SystemExit(1)
     os.makedirs(OUT_DIR, exist_ok=True)
     names = []
     for team, buckets in TEAMS.items():
@@ -175,14 +187,13 @@ def main():
             with open(path, "w") as f:
                 json.dump(doc, f, indent=2)
             names.append(name)
-    attachments_path = os.path.join(os.path.dirname(__file__), "attachments.yaml")
-    with open(attachments_path, "w") as f:
-        f.write(attachments_doc(names))
-
     print(f"generated {len(names)} policies in {OUT_DIR}:")
     for n in names:
         print(" -", n)
-    print(f"generated attachment declaration: {attachments_path}")
+    print()
+    print("이 파일들은 MinIO에 적용할 '저작본'입니다. 적용 후에는")
+    print("examples/ldap-verify/sync-from-minio.sh 로 실물을 다시 받아오세요 —")
+    print("AccessLens가 읽는 것은 MinIO의 사본이지 이 저작본이 아닙니다.")
 
 
 if __name__ == "__main__":

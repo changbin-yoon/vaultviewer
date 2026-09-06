@@ -57,10 +57,10 @@ LDAP_ADMIN_PASSWORD='...' LDAP_USER_PASSWORD='...' sh openldap-server.sh
 # 2) MinIO를 그 LDAP으로
 LDAP_ADDR=10.10.105.4:389 LDAP_BIND_PASSWORD='...' sh minio-ldap.sh
 
-# 3) 팀 정책 적용
-sh apply-policies.sh
+# 3) MinIO의 현재 정책·attach 상태를 레포로 내려받기
+ALIAS=<mc alias> sh sync-from-minio.sh
 
-# 4) 정책 사본 + attach 선언을 AccessLens 네임스페이스에도
+# 4) 그 사본을 ConfigMap으로 AccessLens에 전달
 #    (정책 문서 = 무엇을 허용하는가, attach 선언 = 누가 들고 있는가)
 kubectl -n accesslens create configmap accesslens-policies \
   --from-file=../../policy/generated/ \
@@ -97,10 +97,35 @@ MinIO에 질의한 결과가 아니다. 그래서 정책 개수와 로드 시각
 정책을 재생성했다면 **MinIO(`apply-policies.sh`)와 이 ConfigMap을 함께**
 갱신할 것 — 한쪽만 바꾸면 화면과 실제 권한이 조용히 어긋난다.
 
+## 방향 — MinIO가 진실이다
+
+AccessLens는 **권한을 바꾸지 않는다.** 사용자에게 "당신은 지금 무엇을 할 수
+있는가"를 설명할 뿐이고, 그러려면 MinIO가 실제로 들고 있는 것과 같은
+정책·attach 정보를 갖고 있어야 한다.
+
+```
+MinIO/AIStor  ──(sync-from-minio.sh)──▶  policy/generated/*.json
+   (진실)                                 policy/attachments.yaml
+                                                  │
+                                            (ConfigMap)
+                                                  ▼
+                                            AccessLens 화면
+```
+
+정책을 바꾸는 것은 MinIO 쪽에서 하고(`mc admin policy` / `mc idp ldap policy
+attach`), 그 다음 이 스크립트로 사본을 갱신한다. 레포에서 MinIO로 밀어넣는
+경로는 의도적으로 두지 않았다 — 권한 변경 도구와 권한 조회 도구는 같은 것이
+아니어야 한다.
+
+`policy/gen_policies.py` 는 이 정책 셋을 **최초에 저작할 때** 쓴 도구다.
+평소 운영 경로가 아니며, 실수로 사본을 덮어쓰지 않도록 `FORCE=1` 없이는
+실행되지 않는다.
+
 ## 선언 대조 (드리프트 검사)
 
 대시보드의 S3 IAM 카드에서 관리자만 볼 수 있는 "선언 대조" 버튼이
-`policy/attachments.yaml`과 MinIO 실물을 비교한다. 두 방향을 구분한다:
+`policy/attachments.yaml`(사본)과 MinIO 실물을 비교한다. 사본이 낡았는지
+알려주는 장치다. 두 방향을 구분한다:
 
 - **선언에 없음** — 백엔드가 아무도 적어두지 않은 attach를 들고 있다.
   선언만 읽어서는 영원히 보이지 않는 쪽이라 더 위험하다.
@@ -109,7 +134,14 @@ MinIO에 질의한 결과가 아니다. 그래서 정책 개수와 로드 시각
 
 필요한 자격증명은 `policy/accesslens-drift-audit.json` 정책을 가진 서비스
 계정뿐이다(`admin:ListUsers` + `admin:GetPolicy`, 객체 데이터 접근 불가).
-사용자 자격증명은 필요 없다 — 이유는 그 정책의 README 참고.
+`sync-from-minio.sh` 도 같은 계정을 쓴다. 사용자 자격증명은 필요 없다 —
+이유는 그 정책의 README 참고.
+
+차이가 나오면 **사본을 다시 받으면 된다**:
+
+```sh
+ALIAS=<alias> sh sync-from-minio.sh
+```
 
 ## 드리프트 검증용 고정물
 

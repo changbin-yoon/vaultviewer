@@ -37,9 +37,11 @@ type attachmentFile struct {
 
 // Attachments is the loaded declaration, indexed for lookup by subject.
 //
-// It says what the attachments are meant to be, not what the S3 backend is
-// enforcing right now. That distinction is the whole reason to keep it in a
-// file: the two can finally be diffed.
+// It is a copy of what the S3 backend had attached when it was last synced
+// (see examples/ldap-verify/sync-from-minio.sh), not a live read. AccessLens
+// explains permissions; it never changes them. Keeping the copy in a file is
+// what makes the drift check possible — a copy can be diffed against the
+// backend, a naming convention cannot.
 type Attachments struct {
 	byGroup map[string][]string // normalised group DN -> policy names
 	byUser  map[string][]string // normalised user DN  -> policy names
