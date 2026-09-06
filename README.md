@@ -11,6 +11,9 @@ LDAP 기반 RBAC를 지원하는 웹 시크릿/권한 뷰어. 로컬 파일(마�
 - **프론트엔드**: React + Tailwind (`web/`) — 옵시디언 스타일 마크다운(위키링크, 콜아웃,
   Mermaid), 그래프 뷰, 태그, 역할/팀별 권한(Trino 카탈로그·S3 버킷도 소속 팀
   기준으로 유니크 계산)을 보여주는 대시보드
+- **S3 IAM 권한 조회**: MinIO/AIStor에 attach된 정책의 사본을 읽어 로그인한
+  사용자에게 버킷별 권한과 그 출처를 설명합니다. 권한을 바꾸지는 않습니다 —
+  사본 갱신과 실물 대조는 [`examples/ldap-verify/`](examples/ldap-verify/) 참고
 - **AI agent 연동**: `cmd/mcp-server` — [아래](#ai-agent-연동-mcp-서버) 참고
 - **배포**: Helm 차트 (`charts/vaultviewer/`) — 값 하나하나에 대한 자세한 설명은
   [charts/vaultviewer/README.md](charts/vaultviewer/README.md) 참고. 이 문서는
