@@ -117,7 +117,7 @@ func main() {
 	var (
 		s3iamCatalog     *s3iam.Catalog
 		s3iamAttachments *s3iam.Attachments
-		s3iamProber      *s3iam.Prober
+		s3iamDrift       *s3iam.DriftChecker
 	)
 	if s3iamCfg.PolicyDir != "" {
 		catalog, err := s3iam.LoadCatalog(s3iamCfg.PolicyDir)
@@ -141,25 +141,9 @@ func main() {
 				}
 			}
 
-			if s3iamCfg.Probe {
-				probeCfg := s3iam.ProbeConfig{
-					Endpoint:        s3iamCfg.Endpoint,
-					Write:           s3iamCfg.ProbeWrite,
-					MasterAccessKey: s3iamCfg.MasterAccessKey,
-					MasterSecretKey: s3iamCfg.MasterSecretKey,
-				}
-				s3iamProber = s3iam.NewProber(probeCfg)
-				// Say plainly whether writes are being verified. Asking for
-				// the write probe and silently not getting it (no master
-				// credentials) would leave the operator believing a column
-				// is verified when it is only policy-derived.
-				if s3iamCfg.ProbeWrite && !probeCfg.WriteEnabled() {
-					log.Printf("s3 iam probe: read/delete verification on, write verification OFF (ACCESSLENS_S3IAM_MASTER_ACCESS_KEY/SECRET_KEY unset)")
-				} else if probeCfg.WriteEnabled() {
-					log.Printf("s3 iam probe: read/delete/write verification on")
-				} else {
-					log.Printf("s3 iam probe: read/delete verification on")
-				}
+			if s3iamCfg.AdminAccessKey != "" && s3iamCfg.AdminSecretKey != "" {
+				s3iamDrift = s3iam.NewDriftChecker(s3iamCfg, attachments, catalog)
+				log.Printf("s3 iam drift check enabled against %s", s3iamCfg.Endpoint)
 			}
 		}
 	}
@@ -187,7 +171,7 @@ func main() {
 		S3IamClient:      s3iamClient,
 		S3IamCatalog:     s3iamCatalog,
 		S3IamAttachments: s3iamAttachments,
-		S3IamProber:      s3iamProber,
+		S3IamDrift:       s3iamDrift,
 		ConfigInfo:       configInfo,
 		StaticDir:        staticDir,
 		CORSOrigin:       envOr("ACCESSLENS_CORS_ORIGIN", "http://localhost:5173"),

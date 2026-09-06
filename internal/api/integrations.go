@@ -180,20 +180,6 @@ func registerIntegrationRoutes(mux *http.ServeMux, d Deps) {
 				resp["buckets"] = derived
 			}
 
-			// Live verification, when enabled: ask the backend what this
-			// user can actually do, using the session issued for this same
-			// user. creds is the only thing that makes the answer about
-			// them rather than about AccessLens.
-			if d.S3IamProber != nil && creds != nil {
-				if probes, err := d.S3IamProber.Probe(r.Context(), *creds, access.BucketNames()); err != nil {
-					// Reported, not silently dropped: a missing verification
-					// column would read as "not checked" when in fact the
-					// check broke.
-					resp["probeError"] = err.Error()
-				} else {
-					resp["probes"] = probes
-				}
-			}
 		}
 		// accessKeyId/expiresAt are the temporary STS session's own
 		// identifier and expiry — not a secret on their own (no secret key
@@ -207,6 +193,39 @@ func registerIntegrationRoutes(mux *http.ServeMux, d Deps) {
 			}
 		}
 		json.NewEncoder(w).Encode(resp)
+	}))
+
+	// Drift check: does the S3 backend actually enforce what the attachment
+	// declaration says? Admin-only, and deliberately on its own endpoint
+	// rather than folded into /api/s3iam — it makes a live admin call to
+	// the backend and shouldn't run on every dashboard load for every user.
+	mux.HandleFunc("GET /api/s3iam/drift", auth.RequireAuth(d.Sessions, func(w http.ResponseWriter, r *http.Request, user model.User) {
+		w.Header().Set("Content-Type", "application/json")
+		if !user.Role.IsAdmin() {
+			w.WriteHeader(http.StatusForbidden)
+			json.NewEncoder(w).Encode(map[string]string{"error": "관리자만 조회할 수 있습니다"})
+			return
+		}
+		if d.S3IamDrift == nil {
+			json.NewEncoder(w).Encode(map[string]bool{"enabled": false})
+			return
+		}
+		report, err := d.S3IamDrift.Check(r.Context())
+		if err != nil {
+			// Surfaced rather than reduced to "in sync": a failed check that
+			// renders as agreement is the exact falsehood this endpoint
+			// exists to prevent.
+			w.WriteHeader(http.StatusBadGateway)
+			json.NewEncoder(w).Encode(map[string]any{"enabled": true, "error": err.Error()})
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]any{
+			"enabled":   true,
+			"inSync":    report.InSync(),
+			"checkedAt": report.CheckedAt,
+			"subjects":  report.Subjects,
+			"items":     report.Items,
+		})
 	}))
 
 	mux.HandleFunc("GET /api/config", auth.RequireAuth(d.Sessions, func(w http.ResponseWriter, r *http.Request, _ model.User) {

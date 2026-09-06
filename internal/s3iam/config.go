@@ -42,23 +42,14 @@ type Config struct {
 	// rest of the S3 IAM card working — the connectivity check and bucket
 	// list don't depend on it.
 	PolicyDir string
-	// Probe turns on live verification: the dashboard asks the S3 backend
-	// what the logged-in user can actually do, using that user's own
-	// temporary session, instead of only reporting what the mirrored policy
-	// says. Off by default — it costs extra round trips per dashboard load.
-	Probe bool
-	// ProbeWrite additionally verifies write access. Separate from Probe
-	// because read and delete are settled against a key that does not exist
-	// and touch nothing, while write can only be settled by writing.
-	// Requires the master credentials below; without them it stays off.
-	ProbeWrite bool
-	// MasterAccessKey/MasterSecretKey identify the account that removes
-	// what the write probe writes. A separate account is needed because the
-	// user being tested may hold PutObject without DeleteObject — the dev
-	// tier does exactly that — and so cannot clean up after itself.
-	// See policy/accesslens-master.json.
-	MasterAccessKey string
-	MasterSecretKey string
+	// AdminAccessKey/AdminSecretKey read the S3 backend's own view of which
+	// policies are attached to which subjects, so the declaration can be
+	// compared against what is actually enforced. Only two admin actions
+	// are needed — admin:ListUsers and admin:GetPolicy — and neither grants
+	// access to any object data (verified 2026-09-06). Empty disables the
+	// drift check; nothing else depends on them.
+	AdminAccessKey string
+	AdminSecretKey string
 	// AttachmentsPath is the YAML declaration of which policies are attached
 	// to which LDAP group/user DNs (see Attachments). Required whenever
 	// PolicyDir is set: the policy documents say what a policy permits, this
@@ -90,10 +81,8 @@ func (c Config) Enabled() bool {
 //	ACCESSLENS_S3IAM_ROLE_VIEW      (default "view")
 //	ACCESSLENS_S3IAM_POLICY_DIR     (unset disables the access breakdown)
 //	ACCESSLENS_S3IAM_ATTACHMENTS    (policy-to-DN declaration, required with POLICY_DIR)
-//	ACCESSLENS_S3IAM_PROBE          ("true" enables live read/delete verification)
-//	ACCESSLENS_S3IAM_PROBE_WRITE    ("true" also verifies write; needs master keys)
-//	ACCESSLENS_S3IAM_MASTER_ACCESS_KEY
-//	ACCESSLENS_S3IAM_MASTER_SECRET_KEY
+//	ACCESSLENS_S3IAM_ADMIN_ACCESS_KEY  (drift check; needs admin:ListUsers + admin:GetPolicy)
+//	ACCESSLENS_S3IAM_ADMIN_SECRET_KEY
 //	ACCESSLENS_S3IAM_BUCKETS        (comma-separated, default empty)
 //	ACCESSLENS_S3IAM_BUCKET_<TEAM>  (comma-separated, one per team — e.g.
 //	                                ACCESSLENS_S3IAM_BUCKET_BI="team-bi")
@@ -111,10 +100,8 @@ func LoadConfigFromEnv() Config {
 		// `null`, when no buckets are configured.
 		PolicyDir:       os.Getenv("ACCESSLENS_S3IAM_POLICY_DIR"),
 		AttachmentsPath: os.Getenv("ACCESSLENS_S3IAM_ATTACHMENTS"),
-		Probe:           os.Getenv("ACCESSLENS_S3IAM_PROBE") == "true",
-		ProbeWrite:      os.Getenv("ACCESSLENS_S3IAM_PROBE_WRITE") == "true",
-		MasterAccessKey: os.Getenv("ACCESSLENS_S3IAM_MASTER_ACCESS_KEY"),
-		MasterSecretKey: os.Getenv("ACCESSLENS_S3IAM_MASTER_SECRET_KEY"),
+		AdminAccessKey:  os.Getenv("ACCESSLENS_S3IAM_ADMIN_ACCESS_KEY"),
+		AdminSecretKey:  os.Getenv("ACCESSLENS_S3IAM_ADMIN_SECRET_KEY"),
 		Buckets:         []string{},
 		BucketMap:       map[string][]string{},
 	}

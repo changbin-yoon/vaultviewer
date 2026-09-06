@@ -270,3 +270,6 @@ svg.al-arch { width: 100%; height: auto; }
   background: transparent; color: var(--al-text-faint);
   border: 1px dashed var(--al-border);
 }
+
+/* 대조 패널의 실행 버튼 — 카드 안에 들어가므로 기본 버튼보다 작게. */
+.al-btn-sm { font-size: 0.7rem; padding: 2px 9px; }

@@ -181,19 +181,6 @@ export interface S3Access {
   loadedAt: string;
 }
 
-// 실제로 S3 백엔드에 물어본 결과. "정책이 뭐라고 하는가"가 아니라
-// "실제로 되는가"다. error는 deny와 구분된다 — 프로브가 깨진 것을 거부로
-// 접으면 없는 권한을 있다고, 또는 있는 권한을 없다고 단언하게 된다.
-export type ProbeResult = "allow" | "deny" | "skipped" | "error";
-
-export interface S3BucketProbe {
-  bucket: string;
-  read: ProbeResult;
-  write: ProbeResult;
-  delete: ProbeResult;
-  detail?: string;
-}
-
 export interface S3IamIntegration {
   enabled: boolean;
   connected?: boolean;
@@ -211,14 +198,37 @@ export interface S3IamIntegration {
   // Absent when no policy mirror is configured — the card then shows the
   // connectivity check and bucket list only.
   access?: S3Access;
-  // Absent when live verification is off. Present per bucket when on.
-  probes?: S3BucketProbe[];
-  // Set instead of `probes` when verification itself failed.
-  probeError?: string;
 }
 
 export function getS3IamIntegration() {
   return request<S3IamIntegration>("/api/s3iam");
+}
+
+// 선언과 S3 백엔드 실물의 차이. undeclared는 아무도 적어두지 않은 권한을
+// 누군가 갖고 있다는 뜻이고(선언만 읽어서는 안 보인다), unapplied는 화면이
+// 실제로는 없는 권한을 약속하고 있다는 뜻이다.
+export interface DriftItem {
+  kind: "undeclared" | "unapplied";
+  dn: string;
+  declared: string[];
+  actual: string[];
+}
+
+export interface DriftReport {
+  enabled: boolean;
+  inSync?: boolean;
+  checkedAt?: string;
+  // 비교한 주체 수. "차이 0건"과 "아무것도 비교하지 않음"을 구분한다.
+  subjects?: number;
+  items?: DriftItem[];
+  // 검사 자체가 실패한 경우. 일치로 접으면 안 된다.
+  error?: string;
+}
+
+// 관리자 전용. 백엔드에 라이브 admin 호출을 하므로 대시보드 로드마다
+// 자동으로 부르지 않는다.
+export function getS3IamDrift() {
+  return request<DriftReport>("/api/s3iam/drift");
 }
 
 // LDAP 그룹 CN -> 화면에 보여줄 팀 이름. 역할 부여(auth.Config의

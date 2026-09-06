@@ -241,27 +241,25 @@ s3iam:
     mountPath: /etc/accesslens/s3iam-policies
     attachmentsKey: attachments.yaml
 
-  # 라이브 검증. 정책 사본이 뭐라고 말하든, 실제로 S3 백엔드에 물어서
-  # 로그인한 사용자가 무엇을 할 수 있는지 확인한다. 프로브는 그 사용자
-  # 본인의 임시 세션으로 돌기 때문에 답이 그 사람의 권한을 가리킨다.
+  # 드리프트 검사. attach 선언이 S3 백엔드에서 실제로 적용되어 있는지
+  # 대조한다. 선언에만 있는 attach는 "화면이 없는 권한을 약속하는" 것이고,
+  # 백엔드에만 있는 attach는 "아무도 적어두지 않은 권한을 누군가 갖고 있는"
+  # 것이라 후자가 더 위험하다 — 선언만 읽어서는 영원히 안 보인다.
   #
-  # read/delete는 존재하지 않는 키를 대상으로 하므로 부작용이 없다 —
-  # S3가 인가를 먼저 검사하고 존재 여부를 나중에 보기 때문이다.
-  # write만은 실제로 써야 판정되므로 별도 스위치이며, 정리용 마스터
-  # 계정이 있어야 켜진다(쓰기는 되고 삭제는 안 되는 티어가 자기가 쓴
-  # 프로브 객체를 못 지우기 때문 — dev 티어가 정확히 그렇다).
-  probe:
-    enabled: false
-    write: false
-    # policy/accesslens-master.json 정책을 가진 서비스 계정.
-    # 레포에 키를 두지 않는다:
-    #   kubectl -n <ns> create secret generic vaultviewer-s3iam-master \
-    #     --from-literal=accessKey='<ak>' --from-literal=secretKey='<sk>'
-    masterExistingSecret: ""
-    masterAccessKeyKey: accessKey
-    masterSecretKeyKey: secretKey
+  # 필요한 admin 액션은 둘뿐이고 어느 쪽도 객체 데이터에 접근하지 못한다
+  # (2026-09-06 실측 확인):
+  #
+  #   {"Effect":"Allow","Action":["admin:ListUsers","admin:GetPolicy"],
+  #    "Resource":["arn:aws:s3:::*"]}
+  #
+  # 비워두면 검사만 비활성되고 나머지는 그대로 동작한다. 키는 Secret으로:
+  #   kubectl -n <ns> create secret generic vaultviewer-s3iam-admin \
+  #     --from-literal=accessKey='<ak>' --from-literal=secretKey='<sk>'
+  drift:
+    existingSecret: ""
+    accessKeyKey: accessKey
+    secretKeyKey: secretKey
 
-# -- Networking --------------------------------------------------------
 service:
   type: ClusterIP
   port: 8080

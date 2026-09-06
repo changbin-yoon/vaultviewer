@@ -1,0 +1,16 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ReadPolicyAttachments",
+      "Effect": "Allow",
+      "Action": [
+        "admin:ListUsers",
+        "admin:GetPolicy"
+      ],
+      "Resource": [
+        "arn:aws:s3:::*"
+      ]
+    }
+  ]
+}

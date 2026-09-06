@@ -24,33 +24,28 @@ func NewClient(cfg Config) *Client {
 // SessionCredentials is the temporary STS session issued by a successful
 // AssumeRoleWithLDAPIdentity call.
 //
-// The secret key and session token used to be discarded here on the grounds
-// that nothing downstream needed them. The permission prober does: verifying
-// what a user can actually do requires making calls *as that user*, and a
-// session issued for someone else would measure the wrong thing. So they are
-// parsed now, under three rules:
+// Only the access key ID and expiry are parsed. They are surfaced to the
+// dashboard as proof of a real, live session, and an access key ID with no
+// secret authenticates nothing, so it is safe to show to any logged-in role.
 //
-//   - they live in memory for the duration of one request and are never
-//     written to disk, logged, or cached;
-//   - they never leave the process — only AccessKeyID and Expiration are
-//     ever put in an API response, and an access key ID alone authenticates
-//     nothing, which is why it is safe to show;
-//   - the prober uses them for read-only checks by default (see probe.go).
+// The secret key and session token are deliberately left on the floor. A
+// permission prober briefly needed them — verifying what a user can do means
+// calling as that user — but this session belongs to the fixed service
+// account, not to whoever is logged in, so it could only ever have measured
+// the wrong identity. Drift detection answers the same question by comparing
+// the declaration against the backend's own record instead, and needs no
+// user credentials at all.
 type SessionCredentials struct {
-	AccessKeyID     string
-	SecretAccessKey string
-	SessionToken    string
-	Expiration      time.Time
+	AccessKeyID string
+	Expiration  time.Time
 }
 
 type assumeRoleResponse struct {
 	XMLName xml.Name `xml:"AssumeRoleWithLDAPIdentityResponse"`
 	Result  struct {
 		Credentials struct {
-			AccessKeyId     string `xml:"AccessKeyId"`
-			SecretAccessKey string `xml:"SecretAccessKey"`
-			SessionToken    string `xml:"SessionToken"`
-			Expiration      string `xml:"Expiration"`
+			AccessKeyId string `xml:"AccessKeyId"`
+			Expiration  string `xml:"Expiration"`
 		} `xml:"Credentials"`
 	} `xml:"AssumeRoleWithLDAPIdentityResult"`
 }
@@ -95,10 +90,5 @@ func (c *Client) CheckConnection(ctx context.Context) (*SessionCredentials, erro
 	// Best-effort parse — an unparseable/missing expiration still means the
 	// connection itself succeeded, so don't fail the whole check over it.
 	expiration, _ := time.Parse(time.RFC3339, parsed.Result.Credentials.Expiration)
-	return &SessionCredentials{
-		AccessKeyID:     parsed.Result.Credentials.AccessKeyId,
-		SecretAccessKey: parsed.Result.Credentials.SecretAccessKey,
-		SessionToken:    parsed.Result.Credentials.SessionToken,
-		Expiration:      expiration,
-	}, nil
+	return &SessionCredentials{AccessKeyID: parsed.Result.Credentials.AccessKeyId, Expiration: expiration}, nil
 }

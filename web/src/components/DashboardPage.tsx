@@ -1,16 +1,17 @@
 import type { CSSProperties } from "react";
+import { useState } from "react";
 import type {
   Config,
+  DriftReport,
   OpaIntegration,
-  ProbeResult,
   Role,
   S3Access,
-  S3BucketProbe,
   S3Capability,
   S3IamIntegration,
   TeamGrant,
   TrinoIntegration,
 } from "../lib/api";
+import { getS3IamDrift } from "../lib/api";
 import { useIntegrations } from "../lib/useIntegrations";
 import { RoleTag } from "./RoleTag";
 
@@ -323,36 +324,69 @@ const DESTRUCTIVE: S3Capability[] = ["delete", "lifecycleWrite"];
 // 버킷별 권한 내역. 이 값은 MinIO에 질의한 결과가 아니라 AccessLens가 들고
 // 있는 정책 사본에서 계산한 것이라, 정책 개수와 로드 시각을 항상 함께
 // 보여줘서 "실시간"으로 오해하지 않게 한다.
-// 능력 하나가 라이브 검증 대상인지, 그렇다면 결과가 무엇인지.
-// 검증 결과와 정책 계산이 어긋나면 그 자체가 알려야 할 사실이므로
-// 조용히 한쪽을 고르지 않고 둘 다 보여준다.
-function probeMark(
-  probe: S3BucketProbe | undefined,
-  capability: S3Capability,
-  granted: boolean,
-): { label: string; className: string } | null {
-  if (!probe) return null;
-  const result: ProbeResult | undefined =
-    capability === "read" ? probe.read
-      : capability === "write" ? probe.write
-      : capability === "delete" ? probe.delete
-      : undefined;
-  if (!result || result === "skipped") return null;
-  if (result === "error") return { label: "확인불가", className: " al-probe-error" };
-  const verified = (result === "allow") === granted;
-  if (!verified) return { label: result === "allow" ? "실제 허용" : "실제 거부", className: " al-probe-conflict" };
-  return { label: "검증", className: " al-probe-ok" };
+// 선언과 백엔드 실물의 대조. 관리자만 볼 수 있고, 라이브 admin 호출이라
+// 대시보드가 뜰 때 자동으로 부르지 않고 버튼으로 실행한다.
+function S3DriftPanel() {
+  const [report, setReport] = useState<DriftReport | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const run = async () => {
+    setLoading(true);
+    try {
+      setReport(await getS3IamDrift());
+    } catch (e) {
+      setReport({ enabled: true, error: e instanceof Error ? e.message : String(e) });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="al-access">
+      <div className="al-access-head">
+        <span>선언 대조</span>
+        <button className="al-btn al-btn-sm" type="button" onClick={run} disabled={loading}>
+          {loading ? "확인 중…" : "확인"}
+        </button>
+      </div>
+      {report?.enabled === false && (
+        <div className="al-access-via">
+          admin 자격증명이 설정되지 않아 대조할 수 없습니다 (s3iam.drift.existingSecret).
+        </div>
+      )}
+      {/* 검사 실패를 "일치"로 접지 않는다 — 이 화면이 막으려는 바로 그 거짓말이다. */}
+      {report?.error && <div className="al-access-warn">대조 실패: {report.error}</div>}
+      {report?.enabled && !report.error && (
+        <>
+          <div className="al-access-via">
+            주체 {report.subjects}개 대조 ·{" "}
+            {report.checkedAt && new Date(report.checkedAt).toLocaleTimeString()} 기준
+          </div>
+          {report.inSync ? (
+            <div className="al-access-via">선언과 실물이 일치합니다.</div>
+          ) : (
+            (report.items ?? []).map((item) => (
+              <div className="al-access-row" key={item.dn}>
+                <div className="al-access-bucket">
+                  <span className={`al-cap ${item.kind === "undeclared" ? "al-cap-destructive" : ""}`}>
+                    {item.kind === "undeclared" ? "선언에 없음" : "미적용"}
+                  </span>{" "}
+                  {item.dn}
+                </div>
+                <div className="al-access-via">
+                  선언 {item.declared.length ? item.declared.join(", ") : "-"} / 실물{" "}
+                  {item.actual.length ? item.actual.join(", ") : "-"}
+                </div>
+              </div>
+            ))
+          )}
+        </>
+      )}
+    </div>
+  );
 }
 
-function S3AccessBreakdown({
-  access,
-  probes,
-  probeError,
-}: {
-  access: S3Access;
-  probes?: S3BucketProbe[];
-  probeError?: string;
-}) {
+function S3AccessBreakdown({ access }: { access: S3Access }) {
   if (access.buckets.length === 0) {
     return (
       <div className="al-access">
@@ -377,59 +411,21 @@ function S3AccessBreakdown({
           {new Date(access.loadedAt).toLocaleTimeString()} 기준
         </span>
       </div>
-      {access.buckets.map((b) => {
-        const probe = probes?.find((p) => p.bucket === b.bucket);
-        return (
+      {access.buckets.map((b) => (
         <div className="al-access-row" key={b.bucket}>
           <div className="al-access-bucket">{b.bucket === "*" ? "계정 전체" : b.bucket}</div>
           <div className="al-caps">
-            {b.capabilities.map((c) => {
-              const mark = probeMark(probe, c, true);
-              return (
+            {b.capabilities.map((c) => (
               <span
                 key={c}
                 className={`al-cap${DESTRUCTIVE.includes(c) ? " al-cap-destructive" : ""}`}
               >
                 {CAPABILITY_LABELS[c] ?? c}
-                {mark && <em className={`al-probe${mark.className}`}>{mark.label}</em>}
-              </span>
-              );
-            })}
-            {/* 정책상 없는 권한도 실제로 거부되는지 확인됐다면 그 사실을 보여준다.
-                "없다"보다 "없음을 확인했다"가 감사에 훨씬 유용하다. */}
-            {probe &&
-              (["read", "write", "delete"] as S3Capability[])
-                .filter((c) => !b.capabilities.includes(c))
-                .map((c) => {
-                  const mark = probeMark(probe, c, false);
-                  if (!mark) return null;
-                  return (
-                    <span key={`deny-${c}`} className="al-cap al-cap-absent">
-                      {CAPABILITY_LABELS[c]} 없음
-                      <em className={`al-probe${mark.className}`}>{mark.label}</em>
-                    </span>
-                  );
-                })}
-          </div>
-          {/* 정책명만 보여주고 DN은 title에 둔다 — DN은 길어서 카드를 무너뜨리는데,
-              "왜 이 권한이 있나"를 끝까지 추적하려면 필요한 값이다. */}
-          <div className="al-access-via">
-            via{" "}
-            {b.via.map((v, i) => (
-              <span key={`${v.kind}:${v.dn}:${v.policy}`} title={`${v.kind === "user" ? "사용자" : "그룹"} ${v.dn}`}>
-                {i > 0 && ", "}
-                {v.policy}
-                {v.kind === "user" && " (DN 직접)"}
               </span>
             ))}
           </div>
-          {probe?.detail && <div className="al-access-warn">{probe.detail}</div>}
         </div>
-        );
-      })}
-      {probeError && (
-        <div className="al-access-warn">라이브 검증 실패: {probeError} — 아래는 정책 기준 값입니다.</div>
-      )}
+      ))}
       {access.warnings && access.warnings.length > 0 && (
         <div className="al-access-warn">
           {access.warnings.map((w, i) => (
@@ -441,7 +437,7 @@ function S3AccessBreakdown({
   );
 }
 
-function S3IamCard({ s3iam }: { s3iam: S3IamIntegration }) {
+function S3IamCard({ s3iam, role }: { s3iam: S3IamIntegration; role: Role }) {
   if (!s3iam.enabled) return <PlannedCard icon="S3" name="S3 IAM" />;
 
   return (
@@ -488,9 +484,9 @@ function S3IamCard({ s3iam }: { s3iam: S3IamIntegration }) {
           </div>
         )}
       </dl>
-      {s3iam.access && (
-        <S3AccessBreakdown access={s3iam.access} probes={s3iam.probes} probeError={s3iam.probeError} />
-      )}
+      {s3iam.access && <S3AccessBreakdown access={s3iam.access} />}
+      {/* 역할이 못 쓰는 기능은 회색 처리가 아니라 아예 렌더하지 않는다. */}
+      {s3iam.access && role === "adm" && <S3DriftPanel />}
     </div>
   );
 }
@@ -607,7 +603,7 @@ export function DashboardPage({
       <div className="al-perm-grid">
         <TrinoCard trino={trino} />
         <OpaCard opa={opa} />
-        <S3IamCard s3iam={s3iam} />
+        <S3IamCard s3iam={s3iam} role={session.role} />
 
         <div className="al-panel al-perm-card">
           <div className="al-top">
