@@ -36,7 +36,7 @@ TEAMS = {
     "ops": ["team-ops"],
 }
 
-OUT_DIR = os.path.join(os.path.dirname(__file__), "policies")
+OUT_DIR = os.path.join(os.path.dirname(__file__), "generated")
 
 
 def bucket_resources(buckets):
@@ -81,7 +81,6 @@ def policy_dev(buckets):
             "Action": [
                 "s3:PutObject",
                 "s3:PutObjectTagging",
-                "s3:PutLifecycleConfiguration",
                 "s3:GetLifecycleConfiguration",
             ],
             "Resource": object_resources(buckets) + bucket_only_resources(buckets),
@@ -90,13 +89,11 @@ def policy_dev(buckets):
     # No DeleteObject Allow anywhere in this policy: deletion is blocked by
     # implicit deny, not an explicit Deny statement (fix #1).
     #
-    # NOTE (judgment call, flagged not auto-decided): PutLifecycleConfiguration
-    # lets a dev set an ILM rule like "Expiration: Days 1", which achieves
-    # deletion indirectly even though s3:DeleteObject itself is never
-    # granted. If blocking deletion is the actual goal for this tier,
-    # move PutLifecycleConfiguration to the adm tier instead — left in dev
-    # here because that's what was specified, not because it's clearly
-    # correct.
+    # PutLifecycleConfiguration was moved to the adm tier (2026-09-06): an
+    # ILM rule like "Expiration: Days 1" deletes objects, so granting it
+    # here handed dev an indirect delete path while the tier advertises no
+    # deletion at all. GetLifecycleConfiguration stays — reading the
+    # retention rules on your own team's bucket is read-only and useful.
     return p
 
 
@@ -105,7 +102,12 @@ def policy_adm(buckets):
     p["Statement"].append(
         {
             "Effect": "Allow",
-            "Action": ["s3:DeleteObject", "s3:PutBucketPolicy", "s3:GetBucketPolicy"],
+            "Action": [
+                "s3:DeleteObject",
+                "s3:PutLifecycleConfiguration",
+                "s3:PutBucketPolicy",
+                "s3:GetBucketPolicy",
+            ],
             "Resource": object_resources(buckets) + bucket_only_resources(buckets),
         }
     )
@@ -116,6 +118,10 @@ def policy_adm(buckets):
             "Resource": ["arn:aws:s3:::*"],
         }
     )
+    # PutLifecycleConfiguration is grouped with DeleteObject deliberately:
+    # both are ways to remove objects, and keeping them in one statement
+    # keeps "who can destroy data" answerable by reading a single tier.
+    #
     # NOTE (judgment call, flagged not auto-decided): s3:PutBucketPolicy
     # lets an adm attach an anonymous/public-read bucket policy, which is
     # an actual data-exposure risk if this bucket ever holds anything
