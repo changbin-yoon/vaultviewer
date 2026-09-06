@@ -9,6 +9,15 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/minio/madmin-go/v3"
+)
+
+// MinIO requires credentials of a plausible length; madmin rejects shorter
+// ones before a request is ever made.
+const (
+	driftTestAccess = "driftTESTaccessKEY01"
+	driftTestSecret = "driftTESTsecretKEYdriftTESTsecretKEY0102"
 )
 
 // driftFixture builds a checker whose declaration is the given YAML and whose
@@ -34,12 +43,25 @@ func driftFixture(t *testing.T, declaration string, entities map[string]any) (*D
 			w.WriteHeader(http.StatusForbidden)
 			return
 		}
-		_ = json.NewEncoder(w).Encode(entities)
+		// MinIO encrypts admin API response bodies with the requester's
+		// secret key, so the stub has to as well — otherwise the test would
+		// pass against a client that never learned to decrypt.
+		body, err := json.Marshal(entities)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		enc, err := madmin.EncryptData(driftTestSecret, body)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		_, _ = w.Write(enc)
 	}))
 	cfg := Config{
 		Endpoint:       strings.TrimPrefix(srv.URL, "http://"),
-		AdminAccessKey: "ak",
-		AdminSecretKey: "sk",
+		AdminAccessKey: driftTestAccess,
+		AdminSecretKey: driftTestSecret,
 	}
 	return NewDriftChecker(cfg, attachments, nil), srv.Close
 }
@@ -157,7 +179,10 @@ func TestDriftNormalisesDNSpelling(t *testing.T) {
 
 func TestDriftReportsDeniedAdminCredentialsClearly(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// A real MinIO denial carries an error document; the client has to
+		// recognise it whether or not one is present.
 		w.WriteHeader(http.StatusForbidden)
+		_, _ = w.Write([]byte(`<Error><Code>AccessDenied</Code><Message>Access Denied.</Message></Error>`))
 	}))
 	defer srv.Close()
 	path := filepath.Join(t.TempDir(), "a.yaml")
@@ -170,7 +195,7 @@ func TestDriftReportsDeniedAdminCredentialsClearly(t *testing.T) {
 	}
 	d := NewDriftChecker(Config{
 		Endpoint:       strings.TrimPrefix(srv.URL, "http://"),
-		AdminAccessKey: "ak", AdminSecretKey: "sk",
+		AdminAccessKey: driftTestAccess, AdminSecretKey: driftTestSecret,
 	}, attachments, nil)
 
 	_, err = d.Check(context.Background())

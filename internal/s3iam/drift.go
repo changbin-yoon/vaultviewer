@@ -2,14 +2,12 @@ package s3iam
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"sort"
+	"strings"
 	"time"
 
-	"github.com/minio/minio-go/v7/pkg/signer"
+	"github.com/minio/madmin-go/v3"
 )
 
 // DriftKind classifies one disagreement between the declaration and what the
@@ -60,74 +58,48 @@ type DriftChecker struct {
 	cfg         Config
 	attachments *Attachments
 	catalog     *Catalog
-	http        *http.Client
 }
 
 func NewDriftChecker(cfg Config, attachments *Attachments, catalog *Catalog) *DriftChecker {
-	return &DriftChecker{
-		cfg:         cfg,
-		attachments: attachments,
-		catalog:     catalog,
-		http:        &http.Client{Timeout: 15 * time.Second},
-	}
+	return &DriftChecker{cfg: cfg, attachments: attachments, catalog: catalog}
 }
 
-// policyEntitiesResponse is MinIO's reply to the LDAP policy-entities admin
-// call, keyed by policy with the subjects each is attached to.
-type policyEntitiesResponse struct {
-	Timestamp      time.Time `json:"timestamp"`
-	PolicyMappings []struct {
-		Policy string   `json:"policy"`
-		Users  []string `json:"users"`
-		Groups []string `json:"groups"`
-	} `json:"policyMappings"`
-}
-
-// adminGet performs a SigV4-signed GET against the MinIO admin API.
+// client builds the admin client.
 //
-// The request is signed with minio-go's signer rather than pulling in
-// madmin-go: minio-go is already a dependency, and the drift check needs
-// exactly one endpoint.
-func (d *DriftChecker) adminGet(ctx context.Context, path string) ([]byte, error) {
-	url := fmt.Sprintf("http://%s%s", d.cfg.Endpoint, path)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+// madmin-go is used rather than signing the one endpoint by hand with
+// minio-go's signer. Signing turned out to be only half the problem: MinIO
+// encrypts admin API response bodies with the requester's secret key, so a
+// correctly signed request still comes back as 974 bytes of binary labelled
+// application/json. madmin handles both halves, and reimplementing the
+// response encryption is well past the point where "just one endpoint"
+// justified doing it manually.
+func (d *DriftChecker) client() (*madmin.AdminClient, error) {
+	c, err := madmin.New(d.cfg.Endpoint, d.cfg.AdminAccessKey, d.cfg.AdminSecretKey, false)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("s3iam: admin client: %w", err)
 	}
-	// The admin API is signed as the "s3" service in us-east-1 regardless of
-	// where the cluster actually is.
-	signed := signer.SignV4(*req, d.cfg.AdminAccessKey, d.cfg.AdminSecretKey, "", "us-east-1")
-
-	resp, err := d.http.Do(signed)
-	if err != nil {
-		return nil, fmt.Errorf("s3iam: admin request %s: %w", path, err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode == http.StatusForbidden {
-		return nil, fmt.Errorf("s3iam: admin request %s denied — the configured account needs admin:ListUsers and admin:GetPolicy", path)
-	}
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("s3iam: admin request %s: HTTP %d", path, resp.StatusCode)
-	}
-	// Capped: this endpoint returns one entry per policy, but a malformed
-	// or hostile response should not be read into memory without bound.
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
-	if err != nil {
-		return nil, fmt.Errorf("s3iam: read %s: %w", path, err)
-	}
-	return body, nil
+	return c, nil
 }
 
 // Check fetches the backend's attachments and diffs them against the
 // declaration.
 func (d *DriftChecker) Check(ctx context.Context) (*DriftReport, error) {
-	raw, err := d.adminGet(ctx, "/minio/admin/v3/idp/ldap/policy-entities?")
+	client, err := d.client()
 	if err != nil {
 		return nil, err
 	}
-	var parsed policyEntitiesResponse
-	if err := json.Unmarshal(raw, &parsed); err != nil {
-		return nil, fmt.Errorf("s3iam: decode policy entities: %w", err)
+	parsed, err := client.GetLDAPPolicyEntities(ctx, madmin.PolicyEntitiesQuery{})
+	if err != nil {
+		// Name the two actions needed: MinIO has dozens of admin
+		// permissions and "access denied" alone leaves an operator guessing.
+		// The string check backs up the typed one because a bare 403 with no
+		// MinIO error body parses into neither a code nor a message.
+		if madmin.ToErrorResponse(err).Code == "AccessDenied" ||
+			strings.Contains(strings.ToLower(err.Error()), "access denied") ||
+			strings.Contains(err.Error(), "403") {
+			return nil, fmt.Errorf("s3iam: 백엔드가 admin 조회를 거부했습니다 — 설정된 계정에 admin:ListUsers와 admin:GetPolicy가 필요합니다 (%w)", err)
+		}
+		return nil, fmt.Errorf("s3iam: read policy entities: %w", err)
 	}
 
 	// Invert the backend's policy-keyed view into the subject-keyed one the
