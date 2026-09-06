@@ -103,6 +103,25 @@ func main() {
 	s3iamCfg := s3iam.LoadConfigFromEnv()
 	s3iamClient := s3iam.NewClient(s3iamCfg)
 
+	// The mirrored MinIO policy set powers the S3 IAM card's per-bucket
+	// capability breakdown. A failure here is logged and left nil rather
+	// than fatal: the rest of the card (connectivity, buckets) still works
+	// without it, and refusing to start over a missing ConfigMap mount
+	// would take the whole app down for one dashboard panel. The log line
+	// names the directory so a bad mount path is findable — a silently
+	// empty breakdown would look identical to "you have no permissions".
+	var s3iamCatalog *s3iam.Catalog
+	if s3iamCfg.PolicyDir != "" {
+		catalog, err := s3iam.LoadCatalog(s3iamCfg.PolicyDir)
+		if err != nil {
+			log.Printf("s3 iam policy mirror disabled: %v", err)
+		} else {
+			s3iamCatalog = catalog
+			log.Printf("s3 iam policy mirror loaded: %d policies from %s (digest %s)",
+				len(catalog.Names()), s3iamCfg.PolicyDir, catalog.Digest[:12])
+		}
+	}
+
 	staticDir := envOr("ACCESSLENS_STATIC_DIR", "web/dist")
 	if _, err := os.Stat(staticDir); err == nil {
 		log.Printf("serving frontend from %s", staticDir)
@@ -124,6 +143,7 @@ func main() {
 		OpaClient:     opaClient,
 		S3Iam:         s3iamCfg,
 		S3IamClient:   s3iamClient,
+		S3IamCatalog:  s3iamCatalog,
 		ConfigInfo:    configInfo,
 		StaticDir:     staticDir,
 		CORSOrigin:    envOr("ACCESSLENS_CORS_ORIGIN", "http://localhost:5173"),

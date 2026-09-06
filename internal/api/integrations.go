@@ -32,6 +32,24 @@ func teamNames(teams []model.TeamGrant) []string {
 	return names
 }
 
+// teamPolicyNames reconstructs the "<team>-<role>" names used to look up
+// mirrored MinIO policies for a user (e.g. {bi,dev} -> "bi-dev").
+//
+// model.User carries resolved team grants rather than the raw LDAP group
+// CNs it parsed them from, and reconstructing is preferable to threading
+// the CNs through the session token: the lookup key we actually want is the
+// policy name, and policies are named "<team>-<tier>" regardless of whether
+// the directory's own CN used a hyphen or an underscore (auth.ResolveTeams
+// accepts both). Going through the team grant normalises that difference
+// instead of inheriting it.
+func teamPolicyNames(teams []model.TeamGrant) []string {
+	out := make([]string, len(teams))
+	for i, t := range teams {
+		out[i] = t.Team + "-" + string(t.Role)
+	}
+	return out
+}
+
 // uniqueSorted flattens and deduplicates one or more string lists.
 func uniqueSorted(lists ...[]string) []string {
 	set := map[string]struct{}{}
@@ -151,6 +169,29 @@ func registerIntegrationRoutes(mux *http.ServeMux, d Deps) {
 			"role":      d.S3Iam.RoleMap[user.Role],
 			"buckets":   buckets,
 			"teams":     teamNames(user.Teams),
+		}
+		// The access breakdown is computed from the mirrored policy set,
+		// not queried from the S3 backend — so it is reported under its own
+		// key with the policy set's fingerprint and load time, letting the
+		// UI date what it shows instead of implying it is live. Every role
+		// sees this: it describes the caller's own permissions, so there is
+		// nothing here they aren't already entitled to know.
+		if d.S3IamCatalog != nil {
+			access := d.S3IamCatalog.Resolve(teamPolicyNames(user.Teams), d.S3Iam.PolicyMap)
+			resp["access"] = map[string]any{
+				"buckets":     access.Buckets,
+				"warnings":    access.Warnings,
+				"policyCount": len(d.S3IamCatalog.Names()),
+				"digest":      d.S3IamCatalog.Digest,
+				"loadedAt":    d.S3IamCatalog.LoadedAt,
+			}
+			// Buckets derived from the policies are the authoritative list
+			// when available — they come from the same documents MinIO
+			// enforces, rather than an operator-maintained bucketMap that
+			// can drift from them.
+			if derived := access.BucketNames(); len(derived) > 0 {
+				resp["buckets"] = derived
+			}
 		}
 		// accessKeyId/expiresAt are the temporary STS session's own
 		// identifier and expiry — not a secret on their own (no secret key

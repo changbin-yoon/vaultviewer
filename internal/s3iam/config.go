@@ -36,6 +36,21 @@ type Config struct {
 	// accounts with no team-scoped LDAP groups (see model.TeamGrant) — not
 	// queried live from the S3 endpoint.
 	Buckets []string
+	// PolicyDir is the directory holding the mirrored MinIO/AIStor policy
+	// documents (this repo's policy/generated, mounted as a ConfigMap in
+	// the cluster). Empty disables the access breakdown while leaving the
+	// rest of the S3 IAM card working — the connectivity check and bucket
+	// list don't depend on it.
+	PolicyDir string
+	// PolicyMap overrides the "<team>-<role>" to policy-name convention for
+	// grants that don't follow it. The deployed naming makes the two
+	// identical (a "bi-dev" grant uses policy "bi-dev"), so this is
+	// normally empty — see Catalog.Resolve.
+	//
+	// Keys arrive from ACCESSLENS_S3IAM_POLICY_<GRANT>, and environment
+	// variable names cannot contain a hyphen, so "bi-dev" is spelled
+	// "BI_DEV" here. policyFor folds the two separators when matching.
+	PolicyMap map[string]string
 	// BucketMap maps a team name (e.g. "bi", matching model.TeamGrant.Team)
 	// to the bucket(s) that team can access. For an account with
 	// team-scoped groups, internal/api computes its displayed buckets as
@@ -60,6 +75,8 @@ func (c Config) Enabled() bool {
 //	ACCESSLENS_S3IAM_ROLE_ADM       (default "adm")
 //	ACCESSLENS_S3IAM_ROLE_DEV       (default "dev")
 //	ACCESSLENS_S3IAM_ROLE_VIEW      (default "view")
+//	ACCESSLENS_S3IAM_POLICY_DIR     (unset disables the access breakdown)
+//	ACCESSLENS_S3IAM_POLICY_<GROUP>  (override: group CN -> policy name)
 //	ACCESSLENS_S3IAM_BUCKETS        (comma-separated, default empty)
 //	ACCESSLENS_S3IAM_BUCKET_<TEAM>  (comma-separated, one per team — e.g.
 //	                                ACCESSLENS_S3IAM_BUCKET_BI="team-bi")
@@ -75,6 +92,8 @@ func LoadConfigFromEnv() Config {
 		},
 		// Non-nil so the /api/s3iam response serializes as `[]`, not
 		// `null`, when no buckets are configured.
+		PolicyDir: os.Getenv("ACCESSLENS_S3IAM_POLICY_DIR"),
+		PolicyMap: map[string]string{},
 		Buckets:   []string{},
 		BucketMap: map[string][]string{},
 	}
@@ -84,6 +103,18 @@ func LoadConfigFromEnv() Config {
 			if b != "" {
 				cfg.Buckets = append(cfg.Buckets, b)
 			}
+		}
+	}
+	const policyPrefix = "ACCESSLENS_S3IAM_POLICY_"
+	for _, kv := range os.Environ() {
+		key, value, ok := strings.Cut(kv, "=")
+		// POLICY_DIR is the directory setting, not a group override.
+		if !ok || !strings.HasPrefix(key, policyPrefix) || key == "ACCESSLENS_S3IAM_POLICY_DIR" {
+			continue
+		}
+		group := strings.ToLower(strings.TrimPrefix(key, policyPrefix))
+		if v := strings.TrimSpace(value); v != "" {
+			cfg.PolicyMap[group] = v
 		}
 	}
 	const bucketPrefix = "ACCESSLENS_S3IAM_BUCKET_"

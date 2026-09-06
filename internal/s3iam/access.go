@@ -102,14 +102,34 @@ func (c *Catalog) Names() []string {
 	return names
 }
 
-// policyFor resolves an LDAP group CN to a policy name. The deployed naming
-// convention makes these identical (group "bi-dev" holds policy "bi-dev"),
-// so policyMap only needs entries for groups that break that convention.
-func policyFor(groupCN string, policyMap map[string]string) string {
-	if mapped, ok := policyMap[groupCN]; ok {
+// policyFor resolves a "<team>-<role>" grant name to a policy name. The
+// deployed naming convention makes these identical (a "bi-dev" grant uses
+// policy "bi-dev"), so policyMap only needs entries for grants that break it.
+//
+// The exact key wins; failing that, the lookup retries with hyphens and
+// underscores folded together. That fallback exists because the map is
+// populated from environment variables (ACCESSLENS_S3IAM_POLICY_<GRANT>) and
+// environment variable names cannot contain a hyphen — so an override for
+// "bi-dev" can only ever arrive spelled "BI_DEV". Folding at lookup time
+// keeps that an environment-encoding detail rather than something the
+// operator has to think about.
+func policyFor(grant string, policyMap map[string]string) string {
+	if mapped, ok := policyMap[grant]; ok {
 		return mapped
 	}
-	return groupCN
+	if folded := foldSeparators(grant); folded != grant {
+		if mapped, ok := policyMap[folded]; ok {
+			return mapped
+		}
+	}
+	return grant
+}
+
+// foldSeparators normalises a grant name for comparison: lowercase, with
+// hyphens and underscores treated as the same character (auth.ResolveTeams
+// accepts either as the team/role separator).
+func foldSeparators(s string) string {
+	return strings.ReplaceAll(strings.ToLower(s), "-", "_")
 }
 
 // Resolve computes what the user's LDAP groups grant them, by unioning the

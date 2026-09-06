@@ -216,6 +216,22 @@ func TestResolveNoGroupsGrantsNothing(t *testing.T) {
 	}
 }
 
+// An override for "bi-dev" can only reach the process spelled "BI_DEV",
+// since ACCESSLENS_S3IAM_POLICY_<GRANT> is an environment variable name and
+// those cannot contain a hyphen. The lookup has to bridge that.
+func TestResolvePolicyMapMatchesUnderscoreSpelledOverride(t *testing.T) {
+	catalog := loadRealCatalog(t)
+	access := catalog.Resolve([]string{"bi-dev"}, map[string]string{"bi_dev": "bi-view"})
+	if got := capsOf(access, "team-bi"); !sameCaps(got, []Capability{CapList, CapRead}) {
+		t.Errorf("team-bi = %v, want bi-view's [list read] via the underscore-spelled override", got)
+	}
+	// The exact spelling still wins when both are present.
+	both := catalog.Resolve([]string{"bi-dev"}, map[string]string{"bi_dev": "bi-view", "bi-dev": "bi-adm"})
+	if !both.Can("team-bi", CapDelete) {
+		t.Error("an exact-key override should take precedence over the folded one")
+	}
+}
+
 func TestResolvePolicyMapOverridesNamingConvention(t *testing.T) {
 	catalog := loadRealCatalog(t)
 	access := catalog.Resolve([]string{"cn=analytics-team"}, map[string]string{"cn=analytics-team": "bi-view"})
