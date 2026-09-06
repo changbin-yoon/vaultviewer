@@ -1,8 +1,9 @@
-# Personal/PII vault content — never version control (removed from git
-# history 2026-08-23 after being committed by mistake).
-vault/01-인수인계/
-vault/07-경력-이력서/
-vault/_원본백업/
+# Personal/PII vault content — never version control (PII subdirectories
+# removed from git history 2026-08-23 after being committed by mistake; the
+# whole directory untracked 2026-09-06 since it holds real work notes that
+# were only ever demo data. Files stay on disk — point VAULT_LOCAL_ROOT at
+# it for local dev, or at examples/vault-seed/ for a clean sample vault).
+vault/
 
 # Kubeconfigs contain live cluster credentials.
 *.kubeconfig
