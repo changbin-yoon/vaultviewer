@@ -195,11 +195,28 @@ spec:
             - name: {{ printf "ACCESSLENS_S3IAM_BUCKET_%s" ($team | upper) }}
               value: {{ (kindIs "slice" $buckets) | ternary (join "," $buckets) $buckets | quote }}
             {{- end }}
+            {{- if .Values.s3iam.policies.existingConfigMap }}
+            - name: ACCESSLENS_S3IAM_POLICY_DIR
+              value: {{ .Values.s3iam.policies.mountPath | quote }}
             {{- end }}
-          {{- if and (eq .Values.mode "local") .Values.local.persistence.enabled }}
+            {{- range $grant, $policy := .Values.s3iam.policyMap }}
+            - name: {{ printf "ACCESSLENS_S3IAM_POLICY_%s" ($grant | upper | replace "-" "_") }}
+              value: {{ $policy | quote }}
+            {{- end }}
+            {{- end }}
+          {{- $mountData := and (eq .Values.mode "local") .Values.local.persistence.enabled }}
+          {{- $mountPolicies := and .Values.s3iam.endpoint .Values.s3iam.policies.existingConfigMap }}
+          {{- if or $mountData $mountPolicies }}
           volumeMounts:
+            {{- if $mountData }}
             - name: data
               mountPath: {{ .Values.local.persistence.mountPath }}
+            {{- end }}
+            {{- if $mountPolicies }}
+            - name: s3iam-policies
+              mountPath: {{ .Values.s3iam.policies.mountPath }}
+              readOnly: true
+            {{- end }}
           {{- end }}
           {{- if .Values.startupProbe.enabled }}
           startupProbe:
@@ -219,11 +236,20 @@ spec:
               port: http
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
-      {{- if and (eq .Values.mode "local") .Values.local.persistence.enabled }}
+      {{- $mountData := and (eq .Values.mode "local") .Values.local.persistence.enabled }}
+      {{- $mountPolicies := and .Values.s3iam.endpoint .Values.s3iam.policies.existingConfigMap }}
+      {{- if or $mountData $mountPolicies }}
       volumes:
+        {{- if $mountData }}
         - name: data
           persistentVolumeClaim:
             claimName: {{ .Values.local.persistence.existingClaim | default (printf "%s-data" (include "vaultviewer.fullname" .)) }}
+        {{- end }}
+        {{- if $mountPolicies }}
+        - name: s3iam-policies
+          configMap:
+            name: {{ .Values.s3iam.policies.existingConfigMap }}
+        {{- end }}
       {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:

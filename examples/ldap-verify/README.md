@@ -56,7 +56,11 @@ LDAP_ADDR=10.10.105.4:389 LDAP_BIND_PASSWORD='...' sh minio-ldap.sh
 # 3) 팀 정책 적용
 sh apply-policies.sh
 
-# 4) AccessLens (README 상단의 Secret 3개를 먼저 만들 것)
+# 4) 정책 사본을 AccessLens 네임스페이스에도 (카드의 권한 내역 계산용)
+kubectl -n accesslens create configmap accesslens-policies \
+  --from-file=../../policy/generated/
+
+# 5) AccessLens (README 상단의 Secret 3개를 먼저 만들 것)
 helm upgrade --install accesslens ../../charts/vaultviewer \
   -n accesslens --create-namespace -f accesslens-values.yaml
 ```
@@ -81,6 +85,11 @@ kubectl -n accesslens port-forward svc/accesslens-vaultviewer 8080:8080
 | `ycb` | `[bi]` | `[team-bi]` |
 | `ycb_dev` | `[bi, ml]` | `[team-bi, team-ml]` |
 | `ycb_view` | `[bi, ops]` | `[team-bi, team-ops]` |
+
+카드의 "접근 권한" 내역은 `policy/generated/`의 사본에서 계산한 값이지
+MinIO에 질의한 결과가 아니다. 그래서 정책 개수와 로드 시각을 함께 보여준다.
+정책을 재생성했다면 **MinIO(`apply-policies.sh`)와 이 ConfigMap을 함께**
+갱신할 것 — 한쪽만 바꾸면 화면과 실제 권한이 조용히 어긋난다.
 
 ## 왜 이 디렉토리가 있는가
 

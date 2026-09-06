@@ -216,6 +216,27 @@ s3iam:
   #     - "team-ml"
   bucketMap: {}
 
+  # MinIO/AIStor에 attach된 정책 문서의 사본. 대시보드 S3 IAM 카드가 이걸로
+  # "이 계정이 어느 버킷에 무엇을 할 수 있는지"를 계산한다.
+  #
+  # 정책 파일을 차트 안에 복사하지 않고 기존 ConfigMap을 참조하는 이유는,
+  # 같은 문서가 두 곳에 있으면 반드시 갈라지기 때문이다. MinIO에 정책을 적용할
+  # 때 쓰는 것과 같은 파일로 이 네임스페이스에도 ConfigMap을 만들어 가리킨다:
+  #
+  #   kubectl -n <ns> create configmap accesslens-policies \
+  #     --from-file=policy/generated/
+  #
+  # 비워두면 권한 내역만 빠지고 카드의 나머지(연결 확인, 버킷 목록)는 그대로
+  # 동작한다. 정책을 재생성했다면 이 ConfigMap과 MinIO를 함께 갱신할 것 —
+  # 한쪽만 바꾸면 화면과 실제 권한이 조용히 어긋난다.
+  policies:
+    existingConfigMap: ""
+    mountPath: /etc/accesslens/s3iam-policies
+
+  # 팀 권한("<팀>-<역할>", 예: bi-dev)을 다른 이름의 정책에 매핑해야 할 때만
+  # 채운다. 기본 규칙은 이름이 같은 것이다.
+  policyMap: {}
+
 # -- Networking --------------------------------------------------------
 service:
   type: ClusterIP
