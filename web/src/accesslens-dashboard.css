@@ -226,3 +226,30 @@ svg.al-arch { width: 100%; height: auto; }
   .al-hero { grid-template-columns: 1fr; }
   .al-scope { padding: 20px 18px 40px; }
 }
+
+/* S3 IAM 카드의 버킷별 권한 내역. MinIO 정책 사본에서 계산한 값이라
+   "언제 기준"을 항상 같이 보여준다 — 실시간 조회가 아니다. */
+.al-access { display: flex; flex-direction: column; gap: 10px; }
+.al-access-head {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
+  font-size: 0.78rem; color: var(--al-text-muted);
+}
+.al-access-stamp { font-size: 0.7rem; color: var(--al-text-faint); font-family: "IBM Plex Mono", monospace; }
+.al-access-row { display: flex; flex-direction: column; gap: 5px; }
+.al-access-bucket {
+  font-family: "IBM Plex Mono", monospace; font-size: 0.78rem; color: var(--al-text);
+}
+.al-access-via { font-size: 0.7rem; color: var(--al-text-faint); }
+.al-caps { display: flex; flex-wrap: wrap; gap: 4px; }
+.al-cap {
+  font-size: 0.68rem; padding: 2px 7px; border-radius: 999px; white-space: nowrap;
+  background: var(--al-accent-soft); color: var(--al-accent-strong);
+}
+/* 데이터를 지울 수 있는 능력은 눈에 띄게 구분한다 — 삭제와 수명주기 설정은
+   경로만 다를 뿐 결과가 같아서 같은 취급을 받아야 한다. */
+.al-cap.al-cap-destructive { background: var(--al-bad-soft, #fdecec); color: var(--al-bad, #b42318); }
+.al-access-warn {
+  font-size: 0.7rem; line-height: 1.5; color: var(--al-warn, #8a6100);
+  background: var(--al-warn-soft, #fff6e5); border-radius: 6px; padding: 7px 9px;
+  display: flex; flex-direction: column; gap: 4px;
+}

@@ -1,5 +1,14 @@
 import type { CSSProperties } from "react";
-import type { Config, OpaIntegration, Role, S3IamIntegration, TeamGrant, TrinoIntegration } from "../lib/api";
+import type {
+  Config,
+  OpaIntegration,
+  Role,
+  S3Access,
+  S3Capability,
+  S3IamIntegration,
+  TeamGrant,
+  TrinoIntegration,
+} from "../lib/api";
 import { useIntegrations } from "../lib/useIntegrations";
 import { RoleTag } from "./RoleTag";
 
@@ -288,11 +297,87 @@ function OpaCard({ opa }: { opa: OpaIntegration }) {
 }
 
 // role is the account's single overall resolved role, never per-team (same
-// as Trino's card). buckets are the deduplicated union across every team in
-// `teams` (via s3iam.bucketMap) when the account has team-scoped groups,
-// otherwise the operator-configured flat list — see internal/api's
-// /api/s3iam handler. Only "connected"/accessKeyId/expiresAt reflect a real
-// AssumeRoleWithLDAPIdentity check against the S3 endpoint. See internal/s3iam.
+// as Trino's card). buckets come from the mirrored policy set's own Resource
+// ARNs when a policy mirror is configured, otherwise from the deduplicated
+// union of s3iam.bucketMap across the account's teams (or the flat
+// operator-configured list) — see internal/api's /api/s3iam handler.
+//
+// Only "connected"/accessKeyId/expiresAt reflect a real
+// AssumeRoleWithLDAPIdentity check against the S3 endpoint; everything under
+// `access` is computed from AccessLens's copy of the policies, not queried
+// from MinIO. See internal/s3iam.
+// 액션 이름 대신 사람이 읽는 능력으로 보여준다. 순서는 백엔드의
+// capabilityOrder(읽기 -> 쓰기, 약한 권한 -> 강한 권한)와 같으므로
+// 여기서 다시 정렬하지 않는다.
+const CAPABILITY_LABELS: Record<S3Capability, string> = {
+  list: "목록",
+  read: "읽기",
+  lifecycleRead: "수명주기 조회",
+  write: "쓰기",
+  lifecycleWrite: "수명주기 설정",
+  delete: "삭제",
+  bucketPolicy: "버킷 정책",
+  serviceAccount: "서비스 계정",
+};
+
+// 데이터를 없앨 수 있는 능력. lifecycleWrite가 여기 있는 이유는
+// "Expiration: Days 1" ILM 규칙이 DeleteObject와 결과가 같기 때문이다 —
+// 경로가 다를 뿐이라 화면에서도 같은 무게로 보여야 한다.
+const DESTRUCTIVE: S3Capability[] = ["delete", "lifecycleWrite"];
+
+// 버킷별 권한 내역. 이 값은 MinIO에 질의한 결과가 아니라 AccessLens가 들고
+// 있는 정책 사본에서 계산한 것이라, 정책 개수와 로드 시각을 항상 함께
+// 보여줘서 "실시간"으로 오해하지 않게 한다.
+function S3AccessBreakdown({ access }: { access: S3Access }) {
+  if (access.buckets.length === 0) {
+    return (
+      <div className="al-access">
+        <div className="al-access-head">
+          <span>접근 권한</span>
+          <span className="al-access-stamp">
+            정책 {access.policyCount}개 · {new Date(access.loadedAt).toLocaleTimeString()} 기준
+          </span>
+        </div>
+        <div className="al-access-via">이 계정의 팀에 해당하는 정책이 없습니다.</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="al-access">
+      <div className="al-access-head">
+        <span>접근 권한</span>
+        <span className="al-access-stamp">
+          정책 {access.policyCount}개 · {new Date(access.loadedAt).toLocaleTimeString()} 기준
+        </span>
+      </div>
+      {access.buckets.map((b) => (
+        <div className="al-access-row" key={b.bucket}>
+          <div className="al-access-bucket">{b.bucket === "*" ? "계정 전체" : b.bucket}</div>
+          <div className="al-caps">
+            {b.capabilities.map((c) => (
+              <span
+                key={c}
+                className={`al-cap${DESTRUCTIVE.includes(c) ? " al-cap-destructive" : ""}`}
+              >
+                {CAPABILITY_LABELS[c] ?? c}
+              </span>
+            ))}
+          </div>
+          <div className="al-access-via">via {b.via.map((v) => v.policy).join(", ")}</div>
+        </div>
+      ))}
+      {access.warnings && access.warnings.length > 0 && (
+        <div className="al-access-warn">
+          {access.warnings.map((w, i) => (
+            <span key={i}>{w}</span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function S3IamCard({ s3iam }: { s3iam: S3IamIntegration }) {
   if (!s3iam.enabled) return <PlannedCard icon="S3" name="S3 IAM" />;
 
@@ -340,6 +425,7 @@ function S3IamCard({ s3iam }: { s3iam: S3IamIntegration }) {
           </div>
         )}
       </dl>
+      {s3iam.access && <S3AccessBreakdown access={s3iam.access} />}
     </div>
   );
 }

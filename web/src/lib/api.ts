@@ -140,6 +140,42 @@ export function getOpaIntegration() {
 // A connectivity check (fixed LDAP service account) + operator-configured
 // role/bucket labels — not a live bucket-policy lookup. See internal/s3iam
 // on the backend.
+// One capability an S3 policy grants. Names match internal/s3iam's
+// Capability constants.
+export type S3Capability =
+  | "list"
+  | "read"
+  | "lifecycleRead"
+  | "write"
+  | "lifecycleWrite"
+  | "delete"
+  | "bucketPolicy"
+  | "serviceAccount";
+
+export interface S3BucketAccess {
+  // "*" means account-wide rather than a real bucket (an ARN of
+  // arn:aws:s3:::*, which is how admin actions are scoped).
+  bucket: string;
+  capabilities: S3Capability[];
+  // Which team grant, through which policy, produced this row.
+  via: { groupCn: string; policy: string }[];
+}
+
+// Computed from AccessLens's mirrored copy of the MinIO policy set, NOT
+// queried live from the S3 backend. It therefore can't see policies attached
+// directly to a user DN, a service account's narrowing session policy, or a
+// change made straight against MinIO — hence digest/loadedAt, so the UI can
+// date what it shows.
+export interface S3Access {
+  buckets: S3BucketAccess[];
+  // Policy content that couldn't be represented faithfully; each states
+  // which direction the display is wrong in. Show these.
+  warnings?: string[];
+  policyCount: number;
+  digest: string;
+  loadedAt: string;
+}
+
 export interface S3IamIntegration {
   enabled: boolean;
   connected?: boolean;
@@ -154,6 +190,9 @@ export interface S3IamIntegration {
   // endpoint answered. Present only when connected.
   accessKeyId?: string;
   expiresAt?: string;
+  // Absent when no policy mirror is configured — the card then shows the
+  // connectivity check and bucket list only.
+  access?: S3Access;
 }
 
 export function getS3IamIntegration() {
