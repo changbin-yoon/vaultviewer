@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"syscall"
@@ -103,22 +104,41 @@ func main() {
 	s3iamCfg := s3iam.LoadConfigFromEnv()
 	s3iamClient := s3iam.NewClient(s3iamCfg)
 
-	// The mirrored MinIO policy set powers the S3 IAM card's per-bucket
-	// capability breakdown. A failure here is logged and left nil rather
-	// than fatal: the rest of the card (connectivity, buckets) still works
-	// without it, and refusing to start over a missing ConfigMap mount
-	// would take the whole app down for one dashboard panel. The log line
-	// names the directory so a bad mount path is findable — a silently
-	// empty breakdown would look identical to "you have no permissions".
-	var s3iamCatalog *s3iam.Catalog
+	// The mirrored MinIO policy set (what each policy permits) plus the
+	// attachment declaration (who holds which policy) power the S3 IAM
+	// card's per-bucket capability breakdown. Both are needed; either
+	// missing leaves the breakdown off.
+	//
+	// A failure here is logged and left nil rather than fatal: the rest of
+	// the card still works without it, and refusing to start over one
+	// dashboard panel would take the whole app down. The log names the path
+	// because a bad mount produces a screen ("you have access to nothing")
+	// indistinguishable from a true answer.
+	var (
+		s3iamCatalog     *s3iam.Catalog
+		s3iamAttachments *s3iam.Attachments
+	)
 	if s3iamCfg.PolicyDir != "" {
 		catalog, err := s3iam.LoadCatalog(s3iamCfg.PolicyDir)
 		if err != nil {
 			log.Printf("s3 iam policy mirror disabled: %v", err)
+		} else if s3iamCfg.AttachmentsPath == "" {
+			log.Printf("s3 iam policy mirror disabled: ACCESSLENS_S3IAM_ATTACHMENTS is unset (policy documents alone cannot say who holds them)")
+		} else if attachments, err := s3iam.LoadAttachments(s3iamCfg.AttachmentsPath); err != nil {
+			log.Printf("s3 iam policy mirror disabled: %v", err)
 		} else {
-			s3iamCatalog = catalog
-			log.Printf("s3 iam policy mirror loaded: %d policies from %s (digest %s)",
-				len(catalog.Names()), s3iamCfg.PolicyDir, catalog.Digest[:12])
+			s3iamCatalog, s3iamAttachments = catalog, attachments
+			log.Printf("s3 iam policy mirror loaded: %d policies from %s (digest %s), %d attachments from %s",
+				len(catalog.Names()), s3iamCfg.PolicyDir, catalog.Digest[:12],
+				attachments.Count, s3iamCfg.AttachmentsPath)
+			// A policy named in the declaration but absent from the
+			// documents is a split configuration; say so at startup rather
+			// than only when some user happens to log in.
+			for _, name := range attachments.PolicyNames() {
+				if !slices.Contains(catalog.Names(), name) {
+					log.Printf("s3 iam warning: attachments reference policy %q, which has no document in %s", name, s3iamCfg.PolicyDir)
+				}
+			}
 		}
 	}
 
@@ -131,23 +151,24 @@ func main() {
 	}
 
 	router := api.NewRouter(api.Deps{
-		Engine:        engine,
-		Sessions:      sm,
-		Authenticator: authenticator,
-		LoginThrottle: loginThrottle,
-		Recorder:      recorder,
-		TeamsStore:    teamsStore,
-		Trino:         trinoCfg,
-		TrinoClient:   trinoClient,
-		Opa:           opaCfg,
-		OpaClient:     opaClient,
-		S3Iam:         s3iamCfg,
-		S3IamClient:   s3iamClient,
-		S3IamCatalog:  s3iamCatalog,
-		ConfigInfo:    configInfo,
-		StaticDir:     staticDir,
-		CORSOrigin:    envOr("ACCESSLENS_CORS_ORIGIN", "http://localhost:5173"),
-		MaxBodyBytes:  maxBodyBytes(),
+		Engine:           engine,
+		Sessions:         sm,
+		Authenticator:    authenticator,
+		LoginThrottle:    loginThrottle,
+		Recorder:         recorder,
+		TeamsStore:       teamsStore,
+		Trino:            trinoCfg,
+		TrinoClient:      trinoClient,
+		Opa:              opaCfg,
+		OpaClient:        opaClient,
+		S3Iam:            s3iamCfg,
+		S3IamClient:      s3iamClient,
+		S3IamCatalog:     s3iamCatalog,
+		S3IamAttachments: s3iamAttachments,
+		ConfigInfo:       configInfo,
+		StaticDir:        staticDir,
+		CORSOrigin:       envOr("ACCESSLENS_CORS_ORIGIN", "http://localhost:5173"),
+		MaxBodyBytes:     maxBodyBytes(),
 	})
 
 	// Named HTTP_PORT rather than PORT: Kubernetes auto-injects a

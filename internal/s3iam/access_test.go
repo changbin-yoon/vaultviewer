@@ -3,6 +3,7 @@ package s3iam
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -11,6 +12,29 @@ import (
 // rather than a private copy means this test fails loudly if the two ever
 // drift apart — which is the whole risk of a mirror design.
 const realPolicyDir = "../../policy/generated"
+
+// realAttachments is the declaration generated alongside those policies.
+const realAttachments = "../../policy/attachments.yaml"
+
+func loadRealAttachments(t *testing.T) *Attachments {
+	t.Helper()
+	a, err := LoadAttachments(realAttachments)
+	if err != nil {
+		t.Fatalf("LoadAttachments(%q): %v", realAttachments, err)
+	}
+	return a
+}
+
+// grants resolves the sources for a user in the given group CNs, using the
+// deployment's real group base DN.
+func grants(t *testing.T, groupCNs ...string) []Source {
+	t.Helper()
+	dns := make([]string, len(groupCNs))
+	for i, cn := range groupCNs {
+		dns[i] = "cn=" + cn + ",ou=groups,dc=example,dc=com"
+	}
+	return loadRealAttachments(t).Resolve("", dns)
+}
 
 func loadRealCatalog(t *testing.T) *Catalog {
 	t.Helper()
@@ -127,7 +151,7 @@ func TestResolveTierCapabilities(t *testing.T) {
 		{"bi-adm", []Capability{CapList, CapRead, CapLifecycleRead, CapWrite, CapLifecycleWrite, CapDelete, CapBucketPolicy}},
 	}
 	for _, tt := range tests {
-		access := catalog.Resolve([]string{tt.group}, nil)
+		access := catalog.Resolve(grants(t, tt.group))
 		if len(access.Warnings) != 0 {
 			t.Errorf("%s: unexpected warnings %v", tt.group, access.Warnings)
 		}
@@ -138,7 +162,7 @@ func TestResolveTierCapabilities(t *testing.T) {
 }
 
 func TestResolveAdmGrantsAccountWideServiceAccount(t *testing.T) {
-	access := loadRealCatalog(t).Resolve([]string{"ops-adm"}, nil)
+	access := loadRealCatalog(t).Resolve(grants(t, "ops-adm"))
 	if got := capsOf(access, "*"); !sameCaps(got, []Capability{CapServiceAccount}) {
 		t.Errorf(`bucket "*" = %v, want [serviceAccount]`, got)
 	}
@@ -155,7 +179,7 @@ func TestResolveUnionsMultipleTeams(t *testing.T) {
 	// The multi-team case the dashboard was built for: dev on one team,
 	// read-only on another. A plain union is correct only because the
 	// policy set is Allow-only.
-	access := loadRealCatalog(t).Resolve([]string{"ml-view", "bi-dev"}, nil)
+	access := loadRealCatalog(t).Resolve(grants(t, "ml-view", "bi-dev"))
 	if got := capsOf(access, "team-bi"); !sameCaps(got, []Capability{CapList, CapRead, CapLifecycleRead, CapWrite}) {
 		t.Errorf("team-bi = %v", got)
 	}
@@ -181,14 +205,15 @@ func TestResolveUnionsMultipleTeams(t *testing.T) {
 }
 
 func TestResolveAttributesEachGrantToItsGroup(t *testing.T) {
-	access := loadRealCatalog(t).Resolve([]string{"bi-dev", "ml-view"}, nil)
+	access := loadRealCatalog(t).Resolve(grants(t, "bi-dev", "ml-view"))
 	for _, b := range access.Buckets {
 		if len(b.Via) != 1 {
 			t.Fatalf("%s: Via = %v, want exactly one source", b.Bucket, b.Via)
 		}
 		want := map[string]string{"team-bi": "bi-dev", "team-ml": "ml-view"}[b.Bucket]
-		if b.Via[0].GroupCN != want || b.Via[0].Policy != want {
-			t.Errorf("%s: Via = %v, want group/policy %q", b.Bucket, b.Via[0], want)
+		wantDN := "cn=" + want + ",ou=groups,dc=example,dc=com"
+		if b.Via[0].Kind != SubjectGroup || b.Via[0].DN != wantDN || b.Via[0].Policy != want {
+			t.Errorf("%s: Via = %+v, want group %q policy %q", b.Bucket, b.Via[0], wantDN, want)
 		}
 	}
 }
@@ -196,7 +221,7 @@ func TestResolveAttributesEachGrantToItsGroup(t *testing.T) {
 func TestResolveIgnoresGroupsWithNoPolicy(t *testing.T) {
 	// Bare role groups and org-wide groups are not S3 policies; warning
 	// about each would bury the warnings that matter.
-	access := loadRealCatalog(t).Resolve([]string{"adm", "everyone", "bi-view"}, nil)
+	access := loadRealCatalog(t).Resolve(grants(t, "adm", "everyone", "bi-view"))
 	if len(access.Warnings) != 0 {
 		t.Errorf("unmapped groups should be silent, got %v", access.Warnings)
 	}
@@ -206,7 +231,7 @@ func TestResolveIgnoresGroupsWithNoPolicy(t *testing.T) {
 }
 
 func TestResolveNoGroupsGrantsNothing(t *testing.T) {
-	access := loadRealCatalog(t).Resolve(nil, nil)
+	access := loadRealCatalog(t).Resolve(nil)
 	if len(access.Buckets) != 0 {
 		t.Errorf("expected no access, got %v", access.Buckets)
 	}
@@ -216,29 +241,127 @@ func TestResolveNoGroupsGrantsNothing(t *testing.T) {
 	}
 }
 
-// An override for "bi-dev" can only reach the process spelled "BI_DEV",
-// since ACCESSLENS_S3IAM_POLICY_<GRANT> is an environment variable name and
-// those cannot contain a hyphen. The lookup has to bridge that.
-func TestResolvePolicyMapMatchesUnderscoreSpelledOverride(t *testing.T) {
-	catalog := loadRealCatalog(t)
-	access := catalog.Resolve([]string{"bi-dev"}, map[string]string{"bi_dev": "bi-view"})
-	if got := capsOf(access, "team-bi"); !sameCaps(got, []Capability{CapList, CapRead}) {
-		t.Errorf("team-bi = %v, want bi-view's [list read] via the underscore-spelled override", got)
+// The declaration, not a name convention, decides what a group holds — so a
+// group whose CN looks nothing like its policy resolves correctly, and a
+// group can hold more than one policy. Neither was expressible before.
+func TestAttachmentsDeclarationBeatsNamingConvention(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "a.yaml")
+	if err := os.WriteFile(path, []byte(`
+attachments:
+  - policy: bi-view
+    groups: ["cn=analytics-readers,ou=groups,dc=example,dc=com"]
+  - policy: ml-view
+    groups: ["cn=analytics-readers,ou=groups,dc=example,dc=com"]
+`), 0o600); err != nil {
+		t.Fatal(err)
 	}
-	// The exact spelling still wins when both are present.
-	both := catalog.Resolve([]string{"bi-dev"}, map[string]string{"bi_dev": "bi-view", "bi-dev": "bi-adm"})
-	if !both.Can("team-bi", CapDelete) {
-		t.Error("an exact-key override should take precedence over the folded one")
+	attachments, err := LoadAttachments(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sources := attachments.Resolve("", []string{"cn=analytics-readers,ou=groups,dc=example,dc=com"})
+	if len(sources) != 2 {
+		t.Fatalf("one group holding two policies should yield two sources, got %+v", sources)
+	}
+	access := loadRealCatalog(t).Resolve(sources)
+	if !access.Can("team-bi", CapRead) || !access.Can("team-ml", CapRead) {
+		t.Errorf("both attached policies should contribute, got %+v", access.Buckets)
 	}
 }
 
-func TestResolvePolicyMapOverridesNamingConvention(t *testing.T) {
-	catalog := loadRealCatalog(t)
-	access := catalog.Resolve([]string{"cn=analytics-team"}, map[string]string{"cn=analytics-team": "bi-view"})
-	if got := capsOf(access, "team-bi"); !sameCaps(got, []Capability{CapList, CapRead}) {
-		t.Errorf("team-bi = %v, want [list read]", got)
+// MinIO also attaches policies straight to a user DN. The naming-convention
+// lookup could not see those at all.
+func TestAttachmentsResolveUserDN(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "a.yaml")
+	if err := os.WriteFile(path, []byte(`
+attachments:
+  - policy: ops-adm
+    users: ["uid=oncall,ou=users,dc=example,dc=com"]
+`), 0o600); err != nil {
+		t.Fatal(err)
 	}
-	if via := access.Buckets[0].Via[0]; via.GroupCN != "cn=analytics-team" || via.Policy != "bi-view" {
-		t.Errorf("Via = %v, want the group CN attributed to the mapped policy", via)
+	attachments, err := LoadAttachments(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sources := attachments.Resolve("uid=oncall,ou=users,dc=example,dc=com", nil)
+	if len(sources) != 1 || sources[0].Kind != SubjectUser {
+		t.Fatalf("expected one user-kind source, got %+v", sources)
+	}
+	if !loadRealCatalog(t).Resolve(sources).Can("team-ops", CapDelete) {
+		t.Error("a policy attached to the user DN should grant its capabilities")
+	}
+}
+
+// DNs are compared case-insensitively with optional spaces after commas —
+// directories and MinIO disagree on both, and a DN that fails to match looks
+// exactly like "no permissions".
+func TestAttachmentsNormaliseDN(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "a.yaml")
+	if err := os.WriteFile(path, []byte(`
+attachments:
+  - policy: bi-view
+    groups: ["CN=Bi-View, OU=Groups, DC=Example, DC=Com"]
+`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	attachments, err := LoadAttachments(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sources := attachments.Resolve("", []string{"cn=bi-view,ou=groups,dc=example,dc=com"})
+	if len(sources) != 1 {
+		t.Fatalf("DN spelling differences must still match, got %+v", sources)
+	}
+}
+
+func TestLoadAttachmentsEmptyIsError(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "a.yaml")
+	if err := os.WriteFile(path, []byte("attachments: []\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// Same reasoning as an empty policy directory: a wrong path must not
+	// render as "you have access to nothing".
+	if _, err := LoadAttachments(path); err == nil {
+		t.Error("expected an error for a declaration with no attachments")
+	}
+}
+
+// A declared policy with no document is a split configuration, not a group
+// that simply isn't ours — so it is reported rather than skipped.
+func TestResolveWarnsOnAttachedPolicyWithNoDocument(t *testing.T) {
+	access := loadRealCatalog(t).Resolve([]Source{
+		{Kind: SubjectGroup, DN: "cn=ghost,ou=groups,dc=example,dc=com", Policy: "no-such-policy"},
+	})
+	if len(access.Warnings) != 1 {
+		t.Fatalf("expected one warning, got %v", access.Warnings)
+	}
+	if !strings.Contains(access.Warnings[0], "no-such-policy") {
+		t.Errorf("warning should name the missing policy, got %q", access.Warnings[0])
+	}
+}
+
+// The generated declaration and the generated policy documents must not
+// drift: every policy named in one has a document in the other.
+func TestRealAttachmentsMatchRealPolicies(t *testing.T) {
+	catalog := loadRealCatalog(t)
+	for _, name := range loadRealAttachments(t).PolicyNames() {
+		if _, err := LoadCatalog(realPolicyDir); err != nil {
+			t.Fatal(err)
+		}
+		found := false
+		for _, have := range catalog.Names() {
+			if have == name {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("attachments reference policy %q with no document in %s", name, realPolicyDir)
+		}
 	}
 }

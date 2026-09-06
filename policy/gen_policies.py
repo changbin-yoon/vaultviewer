@@ -133,6 +133,36 @@ def policy_adm(buckets):
 
 TIER_BUILDERS = {"view": policy_view, "dev": policy_dev, "adm": policy_adm}
 
+# LDAP group DNs that hold each policy. MinIO attaches policies to a group's
+# DN, so this is what AccessLens matches on too — the group *name* matching
+# the policy name is a convenience of this deployment, not something either
+# system relies on.
+#
+# Emitted as a declaration rather than left implicit so that (a) a group can
+# hold more than one policy, (b) a policy can be attached to several groups
+# or straight to a user DN, and (c) the intended state can be diffed against
+# what MinIO actually reports.
+GROUP_BASE_DN = os.environ.get("GROUP_BASE_DN", "ou=groups,dc=example,dc=com")
+
+
+def attachments_doc(names):
+    lines = [
+        "# 어느 정책이 어느 LDAP 주체에 붙어 있는지에 대한 선언.",
+        "# gen_policies.py가 생성한다 — 손으로 고치지 말고 스크립트를 고칠 것.",
+        "#",
+        "# MinIO가 보고하는 모양과 같다:",
+        "#   {\"policy\": \"bi-dev\", \"users\": null, \"groups\": [\"cn=bi-dev,...\"]}",
+        "#",
+        "# 적용:  mc idp ldap policy attach <alias> <policy> --group '<DN>'",
+        "# 대조:  mc idp ldap policy entities <alias> --json",
+        "attachments:",
+    ]
+    for name in names:
+        lines.append(f"  - policy: {name}")
+        lines.append(f"    groups:")
+        lines.append(f"      - \"cn={name},{GROUP_BASE_DN}\"")
+    return "\n".join(lines) + "\n"
+
 
 def main():
     os.makedirs(OUT_DIR, exist_ok=True)
@@ -145,9 +175,14 @@ def main():
             with open(path, "w") as f:
                 json.dump(doc, f, indent=2)
             names.append(name)
+    attachments_path = os.path.join(os.path.dirname(__file__), "attachments.yaml")
+    with open(attachments_path, "w") as f:
+        f.write(attachments_doc(names))
+
     print(f"generated {len(names)} policies in {OUT_DIR}:")
     for n in names:
         print(" -", n)
+    print(f"generated attachment declaration: {attachments_path}")
 
 
 if __name__ == "__main__":

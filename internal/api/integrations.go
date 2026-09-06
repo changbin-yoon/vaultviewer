@@ -32,24 +32,6 @@ func teamNames(teams []model.TeamGrant) []string {
 	return names
 }
 
-// teamPolicyNames reconstructs the "<team>-<role>" names used to look up
-// mirrored MinIO policies for a user (e.g. {bi,dev} -> "bi-dev").
-//
-// model.User carries resolved team grants rather than the raw LDAP group
-// CNs it parsed them from, and reconstructing is preferable to threading
-// the CNs through the session token: the lookup key we actually want is the
-// policy name, and policies are named "<team>-<tier>" regardless of whether
-// the directory's own CN used a hyphen or an underscore (auth.ResolveTeams
-// accepts both). Going through the team grant normalises that difference
-// instead of inheriting it.
-func teamPolicyNames(teams []model.TeamGrant) []string {
-	out := make([]string, len(teams))
-	for i, t := range teams {
-		out[i] = t.Team + "-" + string(t.Role)
-	}
-	return out
-}
-
 // uniqueSorted flattens and deduplicates one or more string lists.
 func uniqueSorted(lists ...[]string) []string {
 	set := map[string]struct{}{}
@@ -176,14 +158,19 @@ func registerIntegrationRoutes(mux *http.ServeMux, d Deps) {
 		// UI date what it shows instead of implying it is live. Every role
 		// sees this: it describes the caller's own permissions, so there is
 		// nothing here they aren't already entitled to know.
-		if d.S3IamCatalog != nil {
-			access := d.S3IamCatalog.Resolve(teamPolicyNames(user.Teams), d.S3Iam.PolicyMap)
+		if d.S3IamCatalog != nil && d.S3IamAttachments != nil {
+			// The user's own DN and group DNs come from the session (see
+			// auth.sessionIdentity) and are matched against the declaration
+			// exactly as MinIO matches them — no name-shape guessing.
+			sources := d.S3IamAttachments.Resolve(user.DN, user.GroupDNs)
+			access := d.S3IamCatalog.Resolve(sources)
 			resp["access"] = map[string]any{
-				"buckets":     access.Buckets,
-				"warnings":    access.Warnings,
-				"policyCount": len(d.S3IamCatalog.Names()),
-				"digest":      d.S3IamCatalog.Digest,
-				"loadedAt":    d.S3IamCatalog.LoadedAt,
+				"buckets":         access.Buckets,
+				"warnings":        access.Warnings,
+				"policyCount":     len(d.S3IamCatalog.Names()),
+				"attachmentCount": d.S3IamAttachments.Count,
+				"digest":          d.S3IamCatalog.Digest,
+				"loadedAt":        d.S3IamCatalog.LoadedAt,
 			}
 			// Buckets derived from the policies are the authoritative list
 			// when available — they come from the same documents MinIO

@@ -11,16 +11,8 @@ import (
 	"time"
 )
 
-// Source records which LDAP group, through which policy, contributed a
-// grant — so the UI can answer "왜 내가 이 버킷에 쓸 수 있지?" instead of
-// showing an unattributable checkmark.
-type Source struct {
-	GroupCN string `json:"groupCn"`
-	Policy  string `json:"policy"`
-}
-
 // BucketAccess is one row of the dashboard's access table: what the user can
-// do with one bucket, and which group/policy pairs granted it. Bucket "*"
+// do with one bucket, and which subject/policy pairs granted it. Bucket "*"
 // means account-wide rather than a real bucket (an ARN of arn:aws:s3:::*,
 // which is how admin actions are scoped).
 type BucketAccess struct {
@@ -102,74 +94,42 @@ func (c *Catalog) Names() []string {
 	return names
 }
 
-// policyFor resolves a "<team>-<role>" grant name to a policy name. The
-// deployed naming convention makes these identical (a "bi-dev" grant uses
-// policy "bi-dev"), so policyMap only needs entries for grants that break it.
-//
-// The exact key wins; failing that, the lookup retries with hyphens and
-// underscores folded together. That fallback exists because the map is
-// populated from environment variables (ACCESSLENS_S3IAM_POLICY_<GRANT>) and
-// environment variable names cannot contain a hyphen — so an override for
-// "bi-dev" can only ever arrive spelled "BI_DEV". Folding at lookup time
-// keeps that an environment-encoding detail rather than something the
-// operator has to think about.
-func policyFor(grant string, policyMap map[string]string) string {
-	if mapped, ok := policyMap[grant]; ok {
-		return mapped
-	}
-	if folded := foldSeparators(grant); folded != grant {
-		if mapped, ok := policyMap[folded]; ok {
-			return mapped
-		}
-	}
-	return grant
-}
-
-// foldSeparators normalises a grant name for comparison: lowercase, with
-// hyphens and underscores treated as the same character (auth.ResolveTeams
-// accepts either as the team/role separator).
-func foldSeparators(s string) string {
-	return strings.ReplaceAll(strings.ToLower(s), "-", "_")
-}
-
-// Resolve computes what the user's LDAP groups grant them, by unioning the
+// Resolve computes what a set of policy attachments grants, by unioning the
 // capabilities of every attached policy.
 //
 // A plain union is correct only because the mirrored policy set is
-// Allow-only — see PolicyDoc.fold. Group CNs with no matching policy are
-// skipped without comment: most of a directory's groups (the bare
-// adm/dev/view role groups, org-wide groups) are not S3 policies, and
-// warning about each one would bury the warnings that matter.
-func (c *Catalog) Resolve(groupCNs []string, policyMap map[string]string) Access {
+// Allow-only — see PolicyDoc.fold. Sources naming a policy the catalog does
+// not hold are reported as warnings, not skipped: the declaration and the
+// policy documents are meant to be two halves of one configuration, so a
+// name in one and not the other is a real misconfiguration rather than a
+// group that simply isn't ours.
+func (c *Catalog) Resolve(sources []Source) Access {
 	buckets := map[string]map[Capability]bool{}
-	sources := map[string]map[Source]bool{}
+	bucketSources := map[string]map[Source]bool{}
 	var warnings []string
 
-	// Sorted so the resulting Via lists and warning order are stable
-	// regardless of the order LDAP returned the groups in.
-	groups := append([]string(nil), groupCNs...)
-	sort.Strings(groups)
-
-	for _, groupCN := range groups {
-		name := policyFor(groupCN, policyMap)
-		doc, ok := c.policies[name]
+	for _, src := range sources {
+		doc, ok := c.policies[src.Policy]
 		if !ok {
+			warnings = append(warnings, fmt.Sprintf(
+				"%s %s에 붙은 정책 %q의 문서가 없습니다 — 이 권한은 화면에 표시되지 않습니다.",
+				subjectLabel(src.Kind), src.DN, src.Policy))
 			continue
 		}
-		// Fold into a per-policy map first so Via can be attributed to only
-		// the buckets this policy actually touched.
+		// Fold into a per-policy map first so each source is attributed to
+		// only the buckets its own policy touched.
 		granted := map[string]map[Capability]bool{}
-		warnings = append(warnings, doc.fold(name, granted)...)
+		warnings = append(warnings, doc.fold(src.Policy, granted)...)
 
 		for bucket, caps := range granted {
 			if buckets[bucket] == nil {
 				buckets[bucket] = map[Capability]bool{}
-				sources[bucket] = map[Source]bool{}
+				bucketSources[bucket] = map[Source]bool{}
 			}
 			for c := range caps {
 				buckets[bucket][c] = true
 			}
-			sources[bucket][Source{GroupCN: groupCN, Policy: name}] = true
+			bucketSources[bucket][src] = true
 		}
 	}
 
@@ -178,10 +138,17 @@ func (c *Catalog) Resolve(groupCNs []string, policyMap map[string]string) Access
 		access.Buckets = append(access.Buckets, BucketAccess{
 			Bucket:       bucket,
 			Capabilities: sortCapabilities(buckets[bucket]),
-			Via:          sortedSources(sources[bucket]),
+			Via:          sortedSources(bucketSources[bucket]),
 		})
 	}
 	return access
+}
+
+func subjectLabel(kind SubjectKind) string {
+	if kind == SubjectUser {
+		return "사용자"
+	}
+	return "그룹"
 }
 
 // BucketNames lists just the bucket names the access covers, excluding the
@@ -220,8 +187,8 @@ func sortedSources(set map[Source]bool) []Source {
 		out = append(out, s)
 	}
 	sort.Slice(out, func(i, j int) bool {
-		if out[i].GroupCN != out[j].GroupCN {
-			return out[i].GroupCN < out[j].GroupCN
+		if out[i].DN != out[j].DN {
+			return out[i].DN < out[j].DN
 		}
 		return out[i].Policy < out[j].Policy
 	})

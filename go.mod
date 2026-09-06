@@ -6,9 +6,11 @@ require (
 	github.com/go-ldap/ldap/v3 v3.4.14
 	github.com/gorilla/websocket v1.5.4-0.20250319132907-e064f32e3674
 	github.com/minio/minio-go/v7 v7.3.0
+	github.com/modelcontextprotocol/go-sdk v1.7.0
 	k8s.io/api v0.36.4
 	k8s.io/apimachinery v0.36.4
 	k8s.io/client-go v0.36.4
+	sigs.k8s.io/yaml v1.6.0
 )
 
 require (
@@ -34,7 +36,6 @@ require (
 	github.com/mailru/easyjson v0.7.7 // indirect
 	github.com/minio/crc64nvme v1.1.1 // indirect
 	github.com/minio/md5-simd v1.1.2 // indirect
-	github.com/modelcontextprotocol/go-sdk v1.7.0 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.3-0.20250322232337-35a7c28c31ee // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
@@ -67,5 +68,4 @@ require (
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
 	sigs.k8s.io/randfill v1.0.0 // indirect
 	sigs.k8s.io/structured-merge-diff/v6 v6.3.3 // indirect
-	sigs.k8s.io/yaml v1.6.0 // indirect
 )

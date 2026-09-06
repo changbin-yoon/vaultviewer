@@ -38,12 +38,13 @@ type Deps struct {
 	OpaClient   *opa.Client
 	S3Iam       s3iam.Config
 	S3IamClient *s3iam.Client
-	// S3IamCatalog is the mirrored MinIO policy set used to break down what
-	// the caller can actually do with each bucket. Nil when no policy
-	// directory is configured (or it failed to load) — the S3 IAM card then
-	// serves its connectivity check and bucket list as before, just without
-	// the per-bucket capability breakdown.
-	S3IamCatalog *s3iam.Catalog
+	// S3IamCatalog is the mirrored MinIO policy set (what each policy
+	// permits) and S3IamAttachments the declaration of who holds which
+	// policy. Both are needed for the per-bucket capability breakdown, and
+	// both are nil when it isn't configured or failed to load — the S3 IAM
+	// card then serves its connectivity check and bucket list as before.
+	S3IamCatalog     *s3iam.Catalog
+	S3IamAttachments *s3iam.Attachments
 
 	// ConfigInfo is served verbatim at GET /api/config (mode/backend/root
 	// or namespace, deployment label) — see cmd/server's buildEngine.

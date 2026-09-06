@@ -1,0 +1,36 @@
+# 어느 정책이 어느 LDAP 주체에 붙어 있는지에 대한 선언.
+# gen_policies.py가 생성한다 — 손으로 고치지 말고 스크립트를 고칠 것.
+#
+# MinIO가 보고하는 모양과 같다:
+#   {"policy": "bi-dev", "users": null, "groups": ["cn=bi-dev,..."]}
+#
+# 적용:  mc idp ldap policy attach <alias> <policy> --group '<DN>'
+# 대조:  mc idp ldap policy entities <alias> --json
+attachments:
+  - policy: bi-view
+    groups:
+      - "cn=bi-view,ou=groups,dc=example,dc=com"
+  - policy: bi-dev
+    groups:
+      - "cn=bi-dev,ou=groups,dc=example,dc=com"
+  - policy: bi-adm
+    groups:
+      - "cn=bi-adm,ou=groups,dc=example,dc=com"
+  - policy: ml-view
+    groups:
+      - "cn=ml-view,ou=groups,dc=example,dc=com"
+  - policy: ml-dev
+    groups:
+      - "cn=ml-dev,ou=groups,dc=example,dc=com"
+  - policy: ml-adm
+    groups:
+      - "cn=ml-adm,ou=groups,dc=example,dc=com"
+  - policy: ops-view
+    groups:
+      - "cn=ops-view,ou=groups,dc=example,dc=com"
+  - policy: ops-dev
+    groups:
+      - "cn=ops-dev,ou=groups,dc=example,dc=com"
+  - policy: ops-adm
+    groups:
+      - "cn=ops-adm,ou=groups,dc=example,dc=com"
