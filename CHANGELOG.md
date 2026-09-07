@@ -4,6 +4,22 @@ AccessLens(이전 이름: VaultViewer)의 주요 변경 사항을 최신순으�
 번호는 Docker 이미지 태그(`yoochabi/vaultviewer:<version>`)이자 Helm 차트의
 `appVersion`입니다.
 
+## 0.1.54
+
+- **정적 파일에 Cache-Control 추가.** `http.FileServer`는 헤더를 붙이지 않아
+  브라우저가 `index.html`을 임의로 캐시했고, 그러면 새 번들을 가리키는 문서
+  자체가 낡아 배포한 변경이 보이지 않는다. 해시가 붙은 `/assets/*`는 영구
+  캐시(`immutable`), 이름이 고정인 나머지는 `no-cache`(매번 재검증)로 나눈다.
+- 배포 값의 `image.pullPolicy`를 `Always`로. 같은 태그를 덮어쓰는 실수를
+  하더라도 노드가 옛 이미지를 계속 실행하지는 않게 된다.
+
+## 0.1.53
+
+- 0.1.52와 내용은 같고 태그만 새로 끊는다. 0.1.52 태그에 서로 다른 내용을 세 번
+  올렸는데, 차트의 `imagePullPolicy`가 `IfNotPresent`라 노드가 처음 받은
+  이미지를 계속 실행했다 — 구조도가 옛 상태(OPA 위성)로 보이던 원인이다.
+  **같은 태그를 덮어쓰지 말 것.**
+
 ## 0.1.52
 
 대시보드를 **LDAP · Trino · S3 IAM · Vault** 네 개의 권한 카드로 재구성.

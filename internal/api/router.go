@@ -10,6 +10,7 @@ package api
 import (
 	"net/http"
 	"net/url"
+	"strings"
 
 	"github.com/accesslens/accesslens/internal/audit"
 	"github.com/accesslens/accesslens/internal/auth"
@@ -126,11 +127,33 @@ func wsCheckOrigin(allowedOrigin string) func(*http.Request) bool {
 	}
 }
 
+// cacheHeaders tells browsers which built files are safe to keep.
+//
+// The bundler gives every asset a content hash in its filename, so those can
+// be cached indefinitely — a new build produces a new name. index.html is the
+// opposite: its name never changes and its whole job is to point at the
+// current hashed bundle. Letting a browser cache it means a deployed change
+// can stay invisible for as long as that copy lives, which is exactly the
+// failure this rule exists to prevent. http.FileServer sets neither header on
+// its own, leaving index.html to the browser's heuristic caching.
+func cacheHeaders(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/assets/") {
+			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		} else {
+			// no-cache means "revalidate before use", not "never store" —
+			// the browser still gets a cheap 304 when nothing changed.
+			w.Header().Set("Cache-Control", "no-cache")
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 func registerStatic(mux *http.ServeMux, d Deps) {
 	if d.StaticDir == "" {
 		return // API-only mode — cmd/server already logged why.
 	}
-	mux.Handle("/", http.FileServer(http.Dir(d.StaticDir)))
+	mux.Handle("/", cacheHeaders(http.FileServer(http.Dir(d.StaticDir))))
 
 	// A request under /api/ or /ws/ that reaches this point matched no
 	// "METHOD /api/..." pattern above — most likely the right path with

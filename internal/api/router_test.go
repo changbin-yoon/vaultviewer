@@ -58,3 +58,40 @@ func TestStaticCatchAllNeverServesAPIPaths(t *testing.T) {
 		}
 	}
 }
+
+func TestStaticCacheHeaders(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "assets"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "index.html"), []byte("<html></html>"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "assets", "index-abc123.js"), []byte("//"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	mux := http.NewServeMux()
+	registerStatic(mux, Deps{StaticDir: dir})
+
+	tests := []struct {
+		path string
+		want string
+		why  string
+	}{
+		// index.html's name never changes and points at the current hashed
+		// bundle — a cached copy hides deployed changes.
+		{"/", "no-cache", "index.html은 매번 재검증돼야 한다"},
+		{"/index.html", "no-cache", "index.html은 매번 재검증돼야 한다"},
+		// Hashed assets get a new name on every build, so they can be kept.
+		{"/assets/index-abc123.js", "public, max-age=31536000, immutable", "해시 붙은 자산은 영구 캐시 가능"},
+	}
+	for _, tt := range tests {
+		req := httptest.NewRequest(http.MethodGet, tt.path, nil)
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+		if got := rec.Header().Get("Cache-Control"); got != tt.want {
+			t.Errorf("%s: Cache-Control = %q, want %q (%s)", tt.path, got, tt.want, tt.why)
+		}
+	}
+}
