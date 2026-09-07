@@ -3,7 +3,6 @@ import { useState } from "react";
 import type {
   Config,
   DriftReport,
-  OpaIntegration,
   Role,
   S3Access,
   S3Capability,
@@ -30,9 +29,11 @@ const ROLE_DESC: Record<Role, string> = {
 // 위성 노드 목록 — 좌표 없이 이름/기본 상태만. 새 LDAP 연동 서비스가 생기면
 // 이 배열에 한 줄 추가하고 ConnectionDiagram의 live/sub 오버라이드 분기만
 // 더하면 됨 — 좌표는 layoutSatellites가 항상 자동으로 다시 계산함.
+// 중심은 LDAP 계정, 위성은 그 신원으로 권한이 결정되는 시스템들이다 —
+// 대시보드의 권한 카드 넷(LDAP + 시스템 셋)과 정확히 1:1로 대응한다.
+// OPA는 카드와 함께 뺐다(추후 추가); 그때 여기 한 줄을 되살리면 된다.
 const SATELLITE_DEFS: { key: string; label: string; live: boolean; sub: string }[] = [
   { key: "trino", label: "Trino", live: false, sub: "연동 예정" },
-  { key: "opa", label: "OPA", live: false, sub: "연동 예정" },
   { key: "s3", label: "S3 IAM", live: false, sub: "연동 예정" },
   { key: "vault", label: "Vault", live: true, sub: "" }, // sub filled in at render time
 ];
@@ -55,32 +56,21 @@ function layoutSatellites<T extends { key: string }>(defs: T[]): (T & { x: numbe
 
 const SATELLITES = layoutSatellites(SATELLITE_DEFS);
 
-function opaSummary(opa: OpaIntegration): string {
-  const grants = opa.grants ?? [];
-  if (grants.length === 0) return "grants 없음";
-  return grants.map((g) => `${g.team}(${g.role})`).join(", ");
-}
-
 function ConnectionDiagram({
   username,
   vaultSub,
   trino,
-  opa,
   s3iam,
 }: {
   username: string;
   vaultSub: string;
   trino: TrinoIntegration;
-  opa: OpaIntegration;
   s3iam: S3IamIntegration;
 }) {
   const satellites = SATELLITES.map((s) => {
     if (s.key === "vault") return { ...s, sub: vaultSub };
     if (s.key === "trino" && trino.enabled) {
       return { ...s, live: !!trino.connected, sub: trino.connected ? (trino.role ?? "") : "연결 안 됨" };
-    }
-    if (s.key === "opa" && opa.enabled) {
-      return { ...s, live: !!opa.connected, sub: opa.connected ? opaSummary(opa) : "연결 안 됨" };
     }
     if (s.key === "s3" && s3iam.enabled) {
       return { ...s, live: !!s3iam.connected, sub: s3iam.connected ? (s3iam.role ?? "") : "연결 안 됨" };
@@ -93,10 +83,9 @@ function ConnectionDiagram({
   const connectedNames = [
     "Vault",
     trino.enabled && trino.connected ? "Trino" : null,
-    opa.enabled && opa.connected ? "OPA" : null,
     s3iam.enabled && s3iam.connected ? "S3 IAM" : null,
   ].filter((n): n is string => !!n);
-  const plannedNames = ["Trino", "OPA", "S3 IAM"].filter((n) => !connectedNames.includes(n));
+  const plannedNames = ["Trino", "S3 IAM"].filter((n) => !connectedNames.includes(n));
 
   return (
     <svg
@@ -600,7 +589,7 @@ export function DashboardPage({
     : session.department
       ? session.department.slice(0, 2)
       : session.username.slice(0, 2);
-  const { trino, opa, s3iam } = useIntegrations();
+  const { trino, s3iam } = useIntegrations();
 
   // 대시보드가 보여주는 네 축: LDAP(신원) + 그 신원으로 결정되는 세 시스템.
   // OPA는 백엔드(/api/opa, internal/opa)는 그대로 살아 있고 카드만 아직
@@ -612,6 +601,8 @@ export function DashboardPage({
     "Vault",
   ].filter((n): n is string => !!n);
   const integratedLabel = `${integratedNames.join(" · ")} 연동됨`;
+  // 신원(LDAP)을 뺀, 그 신원으로 권한이 결정되는 시스템들.
+  const derivedNames = integratedNames.filter((n) => n !== "LDAP");
   const remainingNames = ["Trino", "S3 IAM"]
     .filter((n) => !integratedNames.includes(n))
     .concat("OPA");
@@ -669,7 +660,9 @@ export function DashboardPage({
             </div>
           )}
           <p className="al-caption">
-            이 계정의 역할이 {integratedNames.join("·")} 권한을 결정합니다.
+            {/* LDAP은 역할을 '주는' 쪽이므로 이 문장의 대상에서 뺀다 —
+                LDAP 그룹 소속 → 역할 → 나머지 시스템 권한 순서다. */}
+            LDAP 그룹 소속이 {derivedNames.join("·")} 권한을 결정합니다.
             {remainingNames.length > 0 && (
               <>
                 {" "}
@@ -682,7 +675,7 @@ export function DashboardPage({
 
         <div className="al-panel al-diagram-panel">
           <h2>계정 연결 구조</h2>
-          <ConnectionDiagram username={session.username} vaultSub={vaultSub} trino={trino} opa={opa} s3iam={s3iam} />
+          <ConnectionDiagram username={session.username} vaultSub={vaultSub} trino={trino} s3iam={s3iam} />
         </div>
       </section>
 
