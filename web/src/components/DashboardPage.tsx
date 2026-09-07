@@ -29,10 +29,12 @@ const ROLE_DESC: Record<Role, string> = {
 // 위성 노드 목록 — 좌표 없이 이름/기본 상태만. 새 LDAP 연동 서비스가 생기면
 // 이 배열에 한 줄 추가하고 ConnectionDiagram의 live/sub 오버라이드 분기만
 // 더하면 됨 — 좌표는 layoutSatellites가 항상 자동으로 다시 계산함.
-// 중심은 LDAP 계정, 위성은 그 신원으로 권한이 결정되는 시스템들이다 —
-// 대시보드의 권한 카드 넷(LDAP + 시스템 셋)과 정확히 1:1로 대응한다.
+// 중심은 로그인한 계정, 위성은 권한 카드 넷과 1:1로 대응한다.
+// LDAP도 위성 하나다 — 로그인에 실제로 쓰인 시스템이고, 카드에도 자리가
+// 있으므로 화면 두 곳이 같은 목록을 보여준다.
 // OPA는 카드와 함께 뺐다(추후 추가); 그때 여기 한 줄을 되살리면 된다.
 const SATELLITE_DEFS: { key: string; label: string; live: boolean; sub: string }[] = [
+  { key: "ldap", label: "LDAP", live: true, sub: "" }, // sub filled in at render time
   { key: "trino", label: "Trino", live: false, sub: "연동 예정" },
   { key: "s3", label: "S3 IAM", live: false, sub: "연동 예정" },
   { key: "vault", label: "Vault", live: true, sub: "" }, // sub filled in at render time
@@ -58,16 +60,23 @@ const SATELLITES = layoutSatellites(SATELLITE_DEFS);
 
 function ConnectionDiagram({
   username,
+  role,
+  groupCount,
   vaultSub,
   trino,
   s3iam,
 }: {
   username: string;
+  role: Role;
+  groupCount: number;
   vaultSub: string;
   trino: TrinoIntegration;
   s3iam: S3IamIntegration;
 }) {
   const satellites = SATELLITES.map((s) => {
+    // 로그인이 성립한 이상 LDAP은 항상 연결된 상태다. 다른 위성이 역할을
+    // 보여주는 자리에, LDAP은 그 역할의 출처인 그룹 수를 보여준다.
+    if (s.key === "ldap") return { ...s, sub: `그룹 ${groupCount}개` };
     if (s.key === "vault") return { ...s, sub: vaultSub };
     if (s.key === "trino" && trino.enabled) {
       return { ...s, live: !!trino.connected, sub: trino.connected ? (trino.role ?? "") : "연결 안 됨" };
@@ -81,6 +90,7 @@ function ConnectionDiagram({
   // 연결 상태에 따라 aria-label을 동적으로 구성 — "연결된 시스템" / "아직
   // 연동 예정인 시스템" 목록을 나눠서 문장으로 조립.
   const connectedNames = [
+    "LDAP",
     "Vault",
     trino.enabled && trino.connected ? "Trino" : null,
     s3iam.enabled && s3iam.connected ? "S3 IAM" : null,
@@ -92,7 +102,7 @@ function ConnectionDiagram({
       className="al-diagram al-diagram-entry"
       viewBox="0 0 640 320"
       role="img"
-      aria-label={`LDAP 계정 ${username}가 ${connectedNames.join("/")}에는 실제로 연결되어 있고${
+      aria-label={`계정 ${username}가 ${connectedNames.join("/")}에는 실제로 연결되어 있고${
         plannedNames.length > 0 ? `, ${plannedNames.join("/")}은 아직 연동 예정임` : ""
       }을 보여주는 구조도`}
     >
@@ -159,6 +169,8 @@ function ConnectionDiagram({
       >
         {username}
       </text>
+      {/* LDAP이 위성으로 나갔으므로 중심은 계정 자체를 나타낸다 — 부제는
+          그 계정이 받은 역할. */}
       <text
         className="al-node-sub"
         x={CENTER.x}
@@ -166,7 +178,7 @@ function ConnectionDiagram({
         textAnchor="middle"
         style={{ "--al-delay": "0.25s", fill: "var(--al-surface)", opacity: 0.85 } as DelayStyle}
       >
-        LDAP
+        {role}
       </text>
     </svg>
   );
@@ -675,7 +687,14 @@ export function DashboardPage({
 
         <div className="al-panel al-diagram-panel">
           <h2>계정 연결 구조</h2>
-          <ConnectionDiagram username={session.username} vaultSub={vaultSub} trino={trino} s3iam={s3iam} />
+          <ConnectionDiagram
+            username={session.username}
+            role={session.role}
+            groupCount={session.groups.length}
+            vaultSub={vaultSub}
+            trino={trino}
+            s3iam={s3iam}
+          />
         </div>
       </section>
 
