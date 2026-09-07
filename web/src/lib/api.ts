@@ -83,7 +83,14 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export async function login(username: string, password: string) {
-  return request<{ token: string; username: string; role: Role; department: string; teams: TeamGrant[] }>(
+  return request<{
+    token: string;
+    username: string;
+    role: Role;
+    department: string;
+    teams: TeamGrant[];
+    groups: string[];
+  }>(
     "/api/login",
     {
       method: "POST",
@@ -94,7 +101,13 @@ export async function login(username: string, password: string) {
 }
 
 export function me() {
-  return request<{ username: string; role: Role; department: string; teams: TeamGrant[] }>("/api/me");
+  return request<{
+    username: string;
+    role: Role;
+    department: string;
+    teams: TeamGrant[];
+    groups: string[];
+  }>("/api/me");
 }
 
 export function getConfig() {

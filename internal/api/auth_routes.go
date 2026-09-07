@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -80,6 +81,7 @@ func registerAuthRoutes(mux *http.ServeMux, d Deps) {
 			"role":       string(user.Role),
 			"department": user.Department,
 			"teams":      teamGrantsJSON(user.Teams),
+			"groups":     groupNames(*user),
 		})
 	})
 
@@ -90,6 +92,19 @@ func registerAuthRoutes(mux *http.ServeMux, d Deps) {
 			"role":       string(user.Role),
 			"department": user.Department,
 			"teams":      teamGrantsJSON(user.Teams),
+			"groups":     groupNames(user),
 		})
 	}))
+}
+
+// groupNames lists the short names of the LDAP groups the caller belongs to.
+// The session carries DNs (what MinIO keys attachments on); the dashboard
+// wants the names a person recognises. Non-nil so it serialises as [].
+func groupNames(user model.User) []string {
+	out := make([]string, 0, len(user.GroupDNs))
+	for _, dn := range user.GroupDNs {
+		out = append(out, auth.GroupCN(dn))
+	}
+	sort.Strings(out)
+	return out
 }

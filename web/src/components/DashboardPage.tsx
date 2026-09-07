@@ -210,6 +210,145 @@ function PlannedCard({ icon, name }: { icon: string; name: string }) {
 // OPA's live teams map) when the account has team-scoped groups, otherwise
 // the operator-configured flat list — see internal/api's /api/trino
 // handler. Only "connected" reflects a real Trino check either way.
+// LDAP은 나머지 세 시스템의 뿌리다. 역할도, 팀도, S3 정책 attach 대상도
+// 전부 여기서 나온 그룹 소속으로 결정된다. 그래서 첫 카드로 두고, 다른
+// 카드의 값이 왜 그런지를 여기서 설명한다.
+function LdapCard({
+  role,
+  department,
+  teams,
+  groups,
+}: {
+  role: Role;
+  department: string;
+  teams: TeamGrant[];
+  groups: string[];
+}) {
+  // 팀 규칙(<팀>-<역할>)에 해당하는 그룹은 그 의미를 함께 보여주고,
+  // 나머지는 이름만 보여준다 — 규칙에 안 맞는 그룹도 감추지 않는다.
+  const teamByGroup = new Map(teams.map((t) => [`${t.team}-${t.role}`, t]));
+
+  return (
+    <div className="al-panel al-perm-card">
+      <div className="al-top">
+        <div className="al-sys">
+          <div className="al-sys-icon">ID</div>
+          <div>
+            <h3>LDAP</h3>
+            <div className="al-role-line">RBAC: {role}</div>
+          </div>
+        </div>
+        <span className="al-status-dot">인증됨</span>
+      </div>
+      <dl>
+        <div className="al-row">
+          <dt>역할</dt>
+          <dd>{role}</dd>
+        </div>
+        {department && (
+          <div className="al-row">
+            <dt>소속</dt>
+            <dd>{department}</dd>
+          </div>
+        )}
+        <div className="al-row">
+          <dt>그룹</dt>
+          <dd>{groups.length}개</dd>
+        </div>
+      </dl>
+      {groups.length > 0 && (
+        <div className="al-access">
+          <div className="al-access-head">
+            <span>소속 그룹</span>
+            <span className="al-access-stamp">아래 권한의 출처</span>
+          </div>
+          {groups.map((g) => {
+            const grant = teamByGroup.get(g);
+            return (
+              <div className="al-access-row" key={g}>
+                <div className="al-access-bucket">{g}</div>
+                <div className="al-access-via">
+                  {grant ? `팀 ${grant.team} · 역할 ${grant.role}` : "팀 규칙에 맞지 않는 그룹"}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Vault 권한은 계정의 역할 하나로 결정된다 — S3처럼 정책 문서가 있는 게
+// 아니라 이 앱이 직접 판정하는 값이라, 능력 칩만 보여주고 출처는 역할이다.
+const VAULT_CAPABILITIES: { label: string; roles: Role[]; destructive?: boolean }[] = [
+  { label: "읽기", roles: ["adm", "dev", "view"] },
+  { label: "생성", roles: ["adm", "dev"] },
+  { label: "수정", roles: ["adm", "dev"] },
+  { label: "삭제", roles: ["adm"], destructive: true },
+];
+
+function VaultCard({
+  role,
+  config,
+  onOpen,
+}: {
+  role: Role;
+  config: Config | null;
+  onOpen: () => void;
+}) {
+  const granted = VAULT_CAPABILITIES.filter((c) => c.roles.includes(role));
+
+  return (
+    <div className="al-panel al-perm-card">
+      <div className="al-top">
+        <div className="al-sys">
+          <div className="al-sys-icon">V</div>
+          <div>
+            <h3>Vault</h3>
+            <div className="al-role-line">RBAC: {role}</div>
+          </div>
+        </div>
+        <span className="al-status-dot">연결됨</span>
+      </div>
+      <dl>
+        {config && (
+          <div className="al-row">
+            <dt>백엔드</dt>
+            <dd>
+              {config.mode} / {config.backend}
+            </dd>
+          </div>
+        )}
+      </dl>
+      <div className="al-access">
+        <div className="al-access-head">
+          <span>접근 권한</span>
+          <span className="al-access-stamp">역할 {role} 기준</span>
+        </div>
+        <div className="al-access-row">
+          <div className="al-caps">
+            {granted.map((c) => (
+              <span key={c.label} className={`al-cap${c.destructive ? " al-cap-destructive" : ""}`}>
+                {c.label}
+              </span>
+            ))}
+            {VAULT_CAPABILITIES.filter((c) => !c.roles.includes(role)).map((c) => (
+              <span key={c.label} className="al-cap al-cap-absent">
+                {c.label} 없음
+              </span>
+            ))}
+          </div>
+          <div className="al-access-via">via LDAP 역할</div>
+        </div>
+      </div>
+      <button className="al-btn" type="button" onClick={onOpen}>
+        Vault 열기 →
+      </button>
+    </div>
+  );
+}
+
 function TrinoCard({ trino }: { trino: TrinoIntegration }) {
   if (!trino.enabled) return <PlannedCard icon="T" name="Trino" />;
 
@@ -251,57 +390,6 @@ function TrinoCard({ trino }: { trino: TrinoIntegration }) {
 
 // team/catalogs/operations are read live from OPA's grants document for
 // the caller's mapped LDAP group — not AccessLens config. See internal/opa.
-function OpaCard({ opa }: { opa: OpaIntegration }) {
-  if (!opa.enabled) return <PlannedCard icon="O" name="OPA" />;
-
-  const grants = opa.grants ?? [];
-  const catalogs = [...new Set(grants.flatMap((g) => g.catalogs))];
-  const operations = [...new Set(grants.flatMap((g) => g.operations))];
-
-  return (
-    <div className="al-panel al-perm-card">
-      <div className="al-top">
-        <div className="al-sys">
-          <div className={`al-sys-icon${opa.connected ? "" : " al-planned"}`}>O</div>
-          <div>
-            <h3>OPA</h3>
-            <div className="al-role-line">
-              {grants.length > 0 ? grants.map((g) => `${g.team}(${g.role})`).join(", ") : "grants 없음"}
-            </div>
-          </div>
-        </div>
-        <span className={`al-status-dot${opa.connected ? "" : " al-planned"}`}>
-          {opa.connected ? "연결됨" : "연결 안 됨"}
-        </span>
-      </div>
-      <dl>
-        {catalogs.length > 0 && (
-          <div className="al-row">
-            <dt>카탈로그</dt>
-            <dd>{catalogs.join(", ")}</dd>
-          </div>
-        )}
-        {operations.length > 0 && (
-          <div className="al-row">
-            <dt>허용 작업</dt>
-            <dd>{operations.join(", ")}</dd>
-          </div>
-        )}
-      </dl>
-    </div>
-  );
-}
-
-// role is the account's single overall resolved role, never per-team (same
-// as Trino's card). buckets come from the mirrored policy set's own Resource
-// ARNs when a policy mirror is configured, otherwise from the deduplicated
-// union of s3iam.bucketMap across the account's teams (or the flat
-// operator-configured list) — see internal/api's /api/s3iam handler.
-//
-// Only "connected"/accessKeyId/expiresAt reflect a real
-// AssumeRoleWithLDAPIdentity check against the S3 endpoint; everything under
-// `access` is computed from AccessLens's copy of the policies, not queried
-// from MinIO. See internal/s3iam.
 // 액션 이름 대신 사람이 읽는 능력으로 보여준다. 순서는 백엔드의
 // capabilityOrder(읽기 -> 쓰기, 약한 권한 -> 강한 권한)와 같으므로
 // 여기서 다시 정렬하지 않는다.
@@ -497,7 +585,7 @@ export function DashboardPage({
   onNavigateView,
 }: {
   config: Config | null;
-  session: { username: string; role: Role; department: string; teams: TeamGrant[] };
+  session: { username: string; role: Role; department: string; teams: TeamGrant[]; groups: string[] };
   onNavigateView: (v: View) => void;
 }) {
   const vaultSub = config ? `${config.mode} 모드` : "";
@@ -514,14 +602,19 @@ export function DashboardPage({
       : session.username.slice(0, 2);
   const { trino, opa, s3iam } = useIntegrations();
 
+  // 대시보드가 보여주는 네 축: LDAP(신원) + 그 신원으로 결정되는 세 시스템.
+  // OPA는 백엔드(/api/opa, internal/opa)는 그대로 살아 있고 카드만 아직
+  // 없다 — 연동 예정 목록에 남겨 그 사실이 화면에 드러나게 한다.
   const integratedNames = [
-    "Vault",
+    "LDAP",
     trino.enabled ? "Trino" : null,
-    opa.enabled ? "OPA" : null,
     s3iam.enabled ? "S3 IAM" : null,
+    "Vault",
   ].filter((n): n is string => !!n);
   const integratedLabel = `${integratedNames.join(" · ")} 연동됨`;
-  const remainingNames = ["Trino", "OPA", "S3 IAM"].filter((n) => !integratedNames.includes(n));
+  const remainingNames = ["Trino", "S3 IAM"]
+    .filter((n) => !integratedNames.includes(n))
+    .concat("OPA");
   const remainingCount = remainingNames.length;
 
   return (
@@ -601,39 +694,17 @@ export function DashboardPage({
       </div>
 
       <div className="al-perm-grid">
+        {/* LDAP이 먼저다 — 나머지 세 카드의 권한이 전부 여기서 나온 그룹
+            소속으로 결정된다. OPA 카드는 뺐다(추후 추가). */}
+        <LdapCard
+          role={session.role}
+          department={session.department}
+          teams={session.teams}
+          groups={session.groups}
+        />
         <TrinoCard trino={trino} />
-        <OpaCard opa={opa} />
         <S3IamCard s3iam={s3iam} role={session.role} />
-
-        <div className="al-panel al-perm-card">
-          <div className="al-top">
-            <div className="al-sys">
-              <div className="al-sys-icon">V</div>
-              <div>
-                <h3>Vault</h3>
-                <div className="al-role-line">RBAC: {session.role}</div>
-              </div>
-            </div>
-            <span className="al-status-dot">연결됨</span>
-          </div>
-          <dl>
-            <div className="al-row">
-              <dt>권한 범위</dt>
-              <dd>{ROLE_DESC[session.role]}</dd>
-            </div>
-            {config && (
-              <div className="al-row">
-                <dt>백엔드</dt>
-                <dd>
-                  {config.mode} / {config.backend}
-                </dd>
-              </div>
-            )}
-          </dl>
-          <button className="al-btn" type="button" onClick={() => onNavigateView("vault")}>
-            Vault 열기 →
-          </button>
-        </div>
+        <VaultCard role={session.role} config={config} onOpen={() => onNavigateView("vault")} />
       </div>
     </div>
   );

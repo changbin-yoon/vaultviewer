@@ -7,6 +7,8 @@ interface Session {
   role: Role;
   department: string;
   teams: TeamGrant[];
+  // LDAP 그룹의 짧은 이름(CN). 어느 그룹이 어떤 권한을 줬는지 설명하는 데 쓴다.
+  groups: string[];
 }
 
 interface AuthState {
@@ -37,7 +39,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = async (username: string, password: string) => {
     const res = await api.login(username, password);
     api.setToken(res.token);
-    setSession({ username: res.username, role: res.role, department: res.department, teams: res.teams });
+    setSession({
+      username: res.username,
+      role: res.role,
+      department: res.department,
+      teams: res.teams,
+      groups: res.groups ?? [],
+    });
   };
 
   const logout = () => {

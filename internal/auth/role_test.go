@@ -64,3 +64,21 @@ func TestResolveTeamsSortsByTeamName(t *testing.T) {
 		t.Fatalf("got %+v, want %+v", got, want)
 	}
 }
+
+func TestGroupCN(t *testing.T) {
+	tests := []struct{ dn, want string }{
+		{"cn=bi-dev,ou=groups,dc=example,dc=com", "bi-dev"},
+		{"CN=Bi-Dev, OU=Groups, DC=Example", "Bi-Dev"},
+		{"cn=team with spaces,ou=groups", "team with spaces"},
+		// Not a cn= first component: showing the operator the raw DN beats
+		// showing them nothing.
+		{"ou=engineering,dc=example,dc=com", "ou=engineering,dc=example,dc=com"},
+		{"bare-string", "bare-string"},
+		{"", ""},
+	}
+	for _, tt := range tests {
+		if got := GroupCN(tt.dn); got != tt.want {
+			t.Errorf("GroupCN(%q) = %q, want %q", tt.dn, got, tt.want)
+		}
+	}
+}

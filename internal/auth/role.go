@@ -3,6 +3,7 @@ package auth
 import (
 	"regexp"
 	"sort"
+	"strings"
 
 	"github.com/accesslens/accesslens/internal/model"
 )
@@ -52,4 +53,23 @@ func ResolveRole(groupCNs []string, mapping map[string]model.Role) (model.Role, 
 		}
 	}
 	return "", false
+}
+
+// GroupCN extracts the common name from a group's distinguished name —
+// "cn=bi-dev,ou=groups,dc=example,dc=com" becomes "bi-dev".
+//
+// The session carries group DNs because that is what an external system such
+// as MinIO keys its policy attachments on (see model.User). The UI wants the
+// short name, and deriving it here avoids widening the session token a second
+// time to carry both spellings of the same thing.
+//
+// A DN whose first component is not a cn= is returned unchanged: it is more
+// useful to show an operator something they can recognise than a blank.
+func GroupCN(dn string) string {
+	first, _, _ := strings.Cut(dn, ",")
+	name, value, found := strings.Cut(first, "=")
+	if !found || !strings.EqualFold(strings.TrimSpace(name), "cn") {
+		return dn
+	}
+	return strings.TrimSpace(value)
 }
