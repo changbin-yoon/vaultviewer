@@ -4,6 +4,22 @@ AccessLens(이전 이름: VaultViewer)의 주요 변경 사항을 최신순으�
 번호는 Docker 이미지 태그(`yoochabi/vaultviewer:<version>`)이자 Helm 차트의
 `appVersion`입니다.
 
+## 0.1.55
+
+- **Trino 연결 확인이 자격증명을 실제로 검증한다.** 지금까지 `/v1/info`를
+  호출했는데 Trino는 이 엔드포인트를 **인증 없이** 서빙한다 — 완전히 틀린
+  비밀번호로도 200이 돌아와 카드가 "연결됨"을 띄웠다(2026-09-07 실측).
+  인증이 걸리는 `POST /v1/statement`로 바꾸고(틀리면 401), 제출한 질의는
+  바로 취소한다 — 헬스체크가 점검 대상에 작업을 쌓아두면 안 된다.
+- 검증 스택의 Trino 연동을 켠다(`trino.endpoint`/`existingSecret`).
+
+  다만 **Trino 자체는 아직 쿼리가 전부 거부된다.** Trino는 인가를 OPA에
+  위임하는데(`access-control.name=opa`), OPA의 grants가 아는 그룹이
+  `dt-bi-adm`/`adm`/`dev`/`view` 등 옛 이름뿐이라 현재 LDAP 그룹
+  (`bi-adm` 등)은 하나도 없다. `SHOW CATALOGS`가 PERMISSION_DENIED로
+  실패한다. 카드의 카탈로그 목록이 여전히 설정값인 이유이며, OPA를 넣을 때
+  함께 풀린다.
+
 ## 0.1.54
 
 - **정적 파일에 Cache-Control 추가.** `http.FileServer`는 헤더를 붙이지 않아

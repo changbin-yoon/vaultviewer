@@ -1,14 +1,21 @@
-# cluster-mesh2 검증 배포용 AccessLens 값.
+# cluster-mesh2 검증 스택에 실제로 배포 중인 값과 동일하다.
 #
-# 비밀번호는 들어 있지 않다. 아래 세 Secret을 먼저 만들 것:
+# 비밀번호는 들어 있지 않다. 아래 Secret들을 먼저 만들 것:
 #   kubectl -n accesslens create secret generic vaultviewer-ldap \
 #     --from-literal=bind-password='<LDAP admin 비밀번호>'
 #   kubectl -n accesslens create secret generic vaultviewer-session \
 #     --from-literal=session-secret="$(openssl rand -hex 32)"
 #   kubectl -n accesslens create secret generic vaultviewer-s3iam \
-#     --from-literal=ldapUsername='ycb_view' --from-literal=ldapPassword='<해당 계정 비밀번호>'
+#     --from-literal=ldapUsername='ycb_view' --from-literal=ldapPassword='<비밀번호>'
+#   kubectl -n accesslens create secret generic vaultviewer-s3iam-admin \
+#     --from-literal=accessKey='<ak>' --from-literal=secretKey='<sk>'   # 선언 대조용
+#   kubectl -n accesslens create secret generic vaultviewer-trino \
+#     --from-literal=username='ycb_view' --from-literal=password='<비밀번호>'
+
 image:
-  tag: "0.1.51-dev1"
+  tag: "0.1.55"
+  # 같은 태그를 덮어써도 노드가 옛 이미지를 계속 쓰지 않도록.
+  pullPolicy: Always
 
 mode: local
 deploymentLabel: "cluster-mesh2"
@@ -20,8 +27,6 @@ local:
     mountPath: /data
 
 ldap:
-  # 클러스터 밖 LDAP 서버. 노드 IP/NodePort를 쓰지 않는 이유는
-  # minio-ldap.sh의 주석 참고.
   host: "10.10.105.4"
   port: 389
   tls: false
@@ -31,9 +36,8 @@ ldap:
   bindDN: "cn=admin,dc=example,dc=com"
   existingSecret: vaultviewer-ldap
   existingSecretKey: bind-password
-  # 그룹 CN이 "<팀>-<역할>" 규칙이라 역할마다 세 팀을 모두 나열한다.
-  # 이 이름들은 MinIO에 attach된 정책명과 1:1로 같다 — seed.ldif가 그렇게
-  # 맞춰져 있고, 그래야 AccessLens의 권한 미러가 성립한다.
+  # 그룹 CN이 "<팀>-<역할>" 규칙이라 역할별로 세 팀의 그룹을 모두 나열한다.
+  # 이 이름들은 MinIO에 attach된 정책명과도 1:1로 같다.
   groupRoleMap:
     adm: "bi-adm,ml-adm,ops-adm"
     dev: "bi-dev,ml-dev,ops-dev"
@@ -46,25 +50,37 @@ session:
 s3iam:
   endpoint: "minio.minio-verify.svc.cluster.local:9000"
   existingSecret: vaultviewer-s3iam
-  # 정책이 미러로 로드되면 버킷 목록은 정책의 Resource ARN에서 유도되므로
-  # 이 bucketMap은 폴백으로만 쓰인다(정책 ConfigMap이 없을 때).
   bucketMap:
     bi: ["team-bi"]
     ml: ["team-ml"]
     ops: ["team-ops"]
-
-  # MinIO에 적용하는 것과 같은 policy/generated/ 파일로 만든 ConfigMap.
-  # 카드의 버킷별 권한 내역이 여기서 계산된다. 먼저 만들어 둘 것:
-  #   kubectl -n accesslens create configmap accesslens-policies \
-  #     --from-file=policy/generated/
+  # 미러 정책 사본 — MinIO에 적용하는 것과 같은 policy/generated/ 파일로
+  # 만든 ConfigMap. 카드의 버킷별 권한 내역이 여기서 계산된다.
   policies:
     existingConfigMap: accesslens-policies
+  # 라이브 검증. read/delete는 없는 키를 대상으로 해서 부작용이 없고,
+  # write는 마스터 계정이 정리를 맡아 켠다.
+  # 선언 대조. admin:ListUsers + admin:GetPolicy 두 개만 가진 계정이라
+  # 객체 데이터에는 접근하지 못한다.
+  drift:
+    existingSecret: vaultviewer-s3iam-admin
 
 opa:
   enabled: false
 trino:
-  enabled: false
+  endpoint: "trino.trino-verify.svc.cluster.local:8443"
+  # 코디네이터 인증서가 자체 서명이라 검증을 끈다(내부 검증 스택 한정).
+  insecureSkipVerify: true
+  existingSecret: vaultviewer-trino
+  # 카탈로그는 설정값이다. Trino는 인가를 OPA에 위임하는데 OPA의 grants가
+  # 현재 LDAP 그룹(bi-adm 등)을 아직 모르기 때문에, 실제로 SHOW CATALOGS를
+  # 물어보면 PERMISSION_DENIED가 난다 — OPA를 넣을 때 이 목록도 실시간
+  # 조회로 바뀐다.
+  catalogs: ["bi", "bi_mart", "ml", "ops"]
 
 service:
-  type: ClusterIP
+  # 노드 밖(사무실 네트워크)에서 바로 열어보기 위한 NodePort.
+  # 32000/32001은 MinIO, 31062/31131은 Trino, 31911은 OPA가 쓰고 있다.
+  type: NodePort
   port: 8080
+  nodePort: 32080
